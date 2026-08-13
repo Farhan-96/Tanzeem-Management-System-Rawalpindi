@@ -21,7 +21,7 @@ export default defineConfig(() => {
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
       proxy: {
         '/api': {
-          target: 'http://localhost:3001',
+          target: 'https://tanzeem-management-system-rawalpindi.onrender.com',
           changeOrigin: true,
         },
       },
@@ -29,7 +29,7 @@ export default defineConfig(() => {
     preview: {
       proxy: {
         '/api': {
-          target: 'http://localhost:3001',
+          target: 'https://tanzeem-management-system-rawalpindi.onrender.com',
           changeOrigin: true,
         },
       },
