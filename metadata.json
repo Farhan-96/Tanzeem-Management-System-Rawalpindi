@@ -1,0 +1,6 @@
+{
+  "name": "Library & Office Asset Inventory System",
+  "description": "Comprehensive management system for books cataloging, lending, permanent sales, pending payments, and office assets with role-based access control.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

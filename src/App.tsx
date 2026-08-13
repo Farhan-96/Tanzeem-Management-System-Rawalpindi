@@ -1,0 +1,168 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState } from 'react';
+import { AppProvider, useApp } from './context/AppContext';
+import { Header } from './components/Header';
+import { DashboardView } from './components/DashboardView';
+import { BookCatalogView } from './components/BookCatalogView';
+import { BookLendingView } from './components/BookLendingView';
+import { BookSalesView } from './components/BookSalesView';
+import { PendingPaymentsView } from './components/PendingPaymentsView';
+import { OfficeAssetsView } from './components/OfficeAssetsView';
+import { ActivityLogsView } from './components/ActivityLogsView';
+
+import { AddBookModal } from './components/modals/AddBookModal';
+import { BorrowBookModal } from './components/modals/BorrowBookModal';
+import { SellBookModal } from './components/modals/SellBookModal';
+import { CollectPaymentModal } from './components/modals/CollectPaymentModal';
+import { AddAssetModal } from './components/modals/AddAssetModal';
+import { PrintInvoiceModal } from './components/modals/PrintInvoiceModal';
+import { Book, BookSaleRecord } from './types';
+
+function MainAppContent() {
+  const [activeTab, setActiveTab] = useState<string>('dashboard');
+
+  // Modal States
+  const [addBookModalOpen, setAddBookModalOpen] = useState(false);
+  const [borrowModalOpen, setBorrowModalOpen] = useState(false);
+  const [sellModalOpen, setSellModalOpen] = useState(false);
+  const [addAssetModalOpen, setAddAssetModalOpen] = useState(false);
+
+  const [collectPaymentModalOpen, setCollectPaymentModalOpen] = useState(false);
+  const [printInvoiceModalOpen, setPrintInvoiceModalOpen] = useState(false);
+
+  const [preselectedBook, setPreselectedBook] = useState<Book | null>(null);
+  const [selectedSaleRecord, setSelectedSaleRecord] = useState<BookSaleRecord | null>(null);
+
+  const openAddBookModal = () => setAddBookModalOpen(true);
+
+  const openBorrowModal = (book?: Book) => {
+    setPreselectedBook(book || null);
+    setBorrowModalOpen(true);
+  };
+
+  const openSellBookModal = (book?: Book) => {
+    setPreselectedBook(book || null);
+    setSellModalOpen(true);
+  };
+
+  const openAddAssetModal = () => setAddAssetModalOpen(true);
+
+  const openCollectPaymentModal = (saleRecord: BookSaleRecord) => {
+    setSelectedSaleRecord(saleRecord);
+    setCollectPaymentModalOpen(true);
+  };
+
+  const openPrintInvoiceModal = (saleRecord: BookSaleRecord) => {
+    setSelectedSaleRecord(saleRecord);
+    setPrintInvoiceModalOpen(true);
+  };
+
+  return (
+    <div className="min-h-screen bg-[#F6F8F5] text-slate-900 font-sans antialiased flex flex-col selection:bg-amber-200 selection:text-emerald-950">
+      {/* Top Header & Navigation Bar */}
+      <Header
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        openAddBookModal={openAddBookModal}
+        openSellBookModal={openSellBookModal}
+        openBorrowModal={openBorrowModal}
+        openAddAssetModal={openAddAssetModal}
+      />
+
+      {/* Main View Container */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {activeTab === 'dashboard' && (
+          <DashboardView
+            setActiveTab={setActiveTab}
+            openAddBookModal={openAddBookModal}
+            openSellBookModal={openSellBookModal}
+            openBorrowModal={openBorrowModal}
+            openAddAssetModal={openAddAssetModal}
+          />
+        )}
+
+        {activeTab === 'books' && (
+          <BookCatalogView
+            openAddBookModal={openAddBookModal}
+            openSellBookModal={openSellBookModal}
+            openBorrowModal={openBorrowModal}
+          />
+        )}
+
+        {activeTab === 'lending' && <BookLendingView openBorrowModal={openBorrowModal} />}
+
+        {activeTab === 'sales' && (
+          <BookSalesView
+            openSellBookModal={openSellBookModal}
+            openCollectPaymentModal={openCollectPaymentModal}
+            openPrintInvoiceModal={openPrintInvoiceModal}
+          />
+        )}
+
+        {activeTab === 'pending-dues' && (
+          <PendingPaymentsView
+            openCollectPaymentModal={openCollectPaymentModal}
+            openPrintInvoiceModal={openPrintInvoiceModal}
+          />
+        )}
+
+        {activeTab === 'assets' && <OfficeAssetsView openAddAssetModal={openAddAssetModal} />}
+
+        {activeTab === 'logs' && <ActivityLogsView />}
+      </main>
+
+      {/* Footer */}
+      <footer className="bg-[#002B1A] text-emerald-200/80 border-t border-emerald-900 text-xs py-4 text-center mt-auto">
+        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <div>
+            <strong className="text-white">Tanzeem Office & Library System</strong> &bull; Central Inventory, Sales & Asset Control
+          </div>
+          <div className="text-[11px] text-amber-300/80 font-medium">
+            Official Theme inspired by tanzeem.org &bull; Role-Based Management System
+          </div>
+        </div>
+      </footer>
+
+      {/* Modals */}
+      <AddBookModal isOpen={addBookModalOpen} onClose={() => setAddBookModalOpen(false)} />
+
+      <BorrowBookModal
+        isOpen={borrowModalOpen}
+        onClose={() => setBorrowModalOpen(false)}
+        preselectedBook={preselectedBook}
+      />
+
+      <SellBookModal
+        isOpen={sellModalOpen}
+        onClose={() => setSellModalOpen(false)}
+        preselectedBook={preselectedBook}
+      />
+
+      <CollectPaymentModal
+        isOpen={collectPaymentModalOpen}
+        onClose={() => setCollectPaymentModalOpen(false)}
+        saleRecord={selectedSaleRecord}
+      />
+
+      <AddAssetModal isOpen={addAssetModalOpen} onClose={() => setAddAssetModalOpen(false)} />
+
+      <PrintInvoiceModal
+        isOpen={printInvoiceModalOpen}
+        onClose={() => setPrintInvoiceModalOpen(false)}
+        saleRecord={selectedSaleRecord}
+      />
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AppProvider>
+      <MainAppContent />
+    </AppProvider>
+  );
+}
