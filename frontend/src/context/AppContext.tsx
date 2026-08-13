@@ -11,6 +11,7 @@ import {
   SaleItem,
 } from '../types';
 import { api } from '../api/client';
+import { apiUrl } from '../api/baseUrl';
 
 const AUTH_SESSION_KEY = 'tanzeem_auth_session';
 
@@ -137,7 +138,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     const boot = async () => {
       try {
-        const statusRes = await fetch('/api/auth/status');
+        const statusRes = await fetch(apiUrl('/api/auth/status'));
         if (statusRes.ok) {
           const status = await statusRes.json();
           setHasRegisteredUsers(Boolean(status.hasUsers));
@@ -186,7 +187,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const login = async (email: string, password: string) => {
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch(apiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -218,7 +219,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     department?: string;
   }) => {
     try {
-      const res = await fetch('/api/auth/register', {
+      const res = await fetch(apiUrl('/api/auth/register'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),

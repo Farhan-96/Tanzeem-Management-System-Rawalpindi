@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { BookOpen, Lock, Mail, User, Building2, ShieldCheck, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { apiUrl } from '../api/baseUrl';
 import { UserRole } from '../types';
 
 export const AuthPage: React.FC = () => {
@@ -28,7 +29,7 @@ export const AuthPage: React.FC = () => {
     let cancelled = false;
     const checkApi = async () => {
       try {
-        const res = await fetch('/api/auth/status');
+        const res = await fetch(apiUrl('/api/auth/status'));
         if (!cancelled) setApiOffline(!res.ok);
       } catch {
         if (!cancelled) setApiOffline(true);

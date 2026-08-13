@@ -37,13 +37,7 @@ const COLLECTIONS = {
   activityLogs: 'activityLogs',
 } as const;
 
-/**
- * Connect to MongoDB.
- *
- * The connection is cached so that Vercel can reuse
- * the same MongoDB connection when the serverless
- * function instance is reused.
- */
+/** Connect to MongoDB (connection cached for the long-running Render process). */
 export async function initializeDatabase(): Promise<Db> {
   if (db) {
     return db;
@@ -302,13 +296,30 @@ function registerCrud(
 }
 
 /**
- * Express application.
- *
- * This app is exported for Vercel through:
- *
- * api/index.ts
+ * Express application — run on Render via `npm start` / `npm run server`.
+ * Frontend (Vercel) calls this API using VITE_API_BASE_URL.
  */
 export const app = express();
+
+/** Open CORS — no origin allowlist. */
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader(
+    'Access-Control-Allow-Methods',
+    'GET,POST,PUT,DELETE,OPTIONS'
+  );
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Authorization'
+  );
+
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
+    return;
+  }
+
+  next();
+});
 
 app.use(
   express.json({
@@ -316,7 +327,7 @@ app.use(
   })
 );
 
-/** Health check — no DB required (useful to verify the Vercel function is up). */
+/** Health check — no DB required (useful to verify Render is up). */
 app.get('/api/health', (_req, res) => {
   res.json({
     ok: true,

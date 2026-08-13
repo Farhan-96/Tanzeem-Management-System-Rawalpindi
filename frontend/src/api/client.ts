@@ -1,7 +1,8 @@
 /** Thin API helpers for MongoDB-backed persistence */
+import { apiUrl } from './baseUrl';
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
+  const res = await fetch(apiUrl(url), {
     headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
     ...init,
   });

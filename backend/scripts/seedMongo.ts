@@ -1,6 +1,6 @@
 /**
  * Seeds the `tanzeem` MongoDB database with all initial app records.
- * Run: npx tsx scripts/seedMongo.ts
+ * Run: npm run seed (from backend/)
  */
 import 'dotenv/config';
 import { MongoClient } from 'mongodb';
@@ -11,15 +11,19 @@ import {
   INITIAL_SALE_RECORDS,
   INITIAL_OFFICE_ASSETS,
   INITIAL_LOGS,
-} from '../src/data/mockData';
+} from '../../frontend/src/data/mockData';
 
-const URI =
-  process.env.MONGODB_URI ||
-  'mongodb+srv://farhan3fareed_db_user:HqV9sxt4GrBrfmC5@cluster0.remzgm1.mongodb.net/tanzeem?retryWrites=true&w=majority';
+const URI = process.env.MONGODB_URI || '';
 
 const DB_NAME = 'tanzeem';
 
 async function seed() {
+  if (!URI) {
+    console.error('MONGODB_URI is not set. Add it to backend/.env');
+    process.exitCode = 1;
+    return;
+  }
+
   const client = new MongoClient(URI);
 
   try {
