@@ -316,6 +316,15 @@ app.use(
   })
 );
 
+/** Health check — no DB required (useful to verify the Vercel function is up). */
+app.get('/api/health', (_req, res) => {
+  res.json({
+    ok: true,
+    database: DB_NAME,
+    mongoConfigured: Boolean(URI),
+  });
+});
+
 /**
  * Initialize MongoDB before handling API requests.
  */
@@ -333,16 +342,6 @@ app.use(async (_req, res, next) => {
       message: 'Database connection failed',
     });
   }
-});
-
-/**
- * Health check
- */
-app.get('/api/health', (_req, res) => {
-  res.json({
-    ok: true,
-    database: DB_NAME,
-  });
 });
 
 /**
