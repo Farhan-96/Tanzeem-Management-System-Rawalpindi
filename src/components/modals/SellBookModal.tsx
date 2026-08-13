@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Receipt, X, Plus, Trash2, DollarSign, AlertCircle, ShoppingCart } from 'lucide-react';
+import { Receipt, X, Plus, Trash2, AlertCircle, ShoppingCart } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { Book } from '../../types';
+import { Book, BookSaleRecord } from '../../types';
 
 interface SellBookModalProps {
   isOpen: boolean;
   onClose: () => void;
   preselectedBook?: Book | null;
-  openPrintInvoiceModal?: (saleRecord: any) => void;
+  openPrintInvoiceModal?: (saleRecord: BookSaleRecord) => void;
 }
 
 interface SaleCartItem {
@@ -18,7 +18,12 @@ interface SaleCartItem {
   quantity: number;
 }
 
-export const SellBookModal: React.FC<SellBookModalProps> = ({ isOpen, onClose, preselectedBook }) => {
+export const SellBookModal: React.FC<SellBookModalProps> = ({
+  isOpen,
+  onClose,
+  preselectedBook,
+  openPrintInvoiceModal,
+}) => {
   const { books, createBookSale } = useApp();
 
   const [customerName, setCustomerName] = useState('');
@@ -183,12 +188,16 @@ export const SellBookModal: React.FC<SellBookModalProps> = ({ isOpen, onClose, p
       return;
     }
 
+    const createdSale = result.saleRecord;
     handleClose();
+    if (createdSale && openPrintInvoiceModal) {
+      openPrintInvoiceModal(createdSale);
+    }
   };
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto"
+      className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-start justify-center p-4 z-50 overflow-y-auto"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           handleClose();
@@ -196,10 +205,10 @@ export const SellBookModal: React.FC<SellBookModalProps> = ({ isOpen, onClose, p
       }}
     >
       <div
-        className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 my-8 relative"
+        className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 my-4 relative max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 pt-6 pb-3 shrink-0">
           <div className="flex items-center space-x-2">
             <Receipt className="w-5 h-5 text-amber-600" />
             <h3 className="text-lg font-bold text-slate-900 font-serif">Create Permanent Book Sale (Purpose 2)</h3>
@@ -220,13 +229,28 @@ export const SellBookModal: React.FC<SellBookModalProps> = ({ isOpen, onClose, p
         </div>
 
         {errorMessage && (
-          <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center space-x-2">
+          <div className="mx-6 mt-4 p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center space-x-2 shrink-0">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{errorMessage}</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+        {books.length === 0 ? (
+          <div className="p-6 text-center space-y-3">
+            <ShoppingCart className="w-10 h-10 text-slate-300 mx-auto" />
+            <p className="text-sm font-semibold text-slate-800">No books available to sell</p>
+            <p className="text-xs text-slate-500">Add books to the catalog before creating a sale invoice.</p>
+            <button
+              type="button"
+              onClick={handleClose}
+              className="px-4 py-2 bg-emerald-700 text-white text-xs font-bold rounded-xl hover:bg-emerald-800"
+            >
+              Close
+            </button>
+          </div>
+        ) : (
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 text-xs">
+          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
           {/* Customer & Unit Details */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
@@ -271,21 +295,22 @@ export const SellBookModal: React.FC<SellBookModalProps> = ({ isOpen, onClose, p
 
           {/* Book Items Cart (Supports 1 or Many books) */}
           <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2.5">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2 sticky top-0 z-10 bg-slate-50 pb-1">
               <span className="font-bold text-slate-800 flex items-center space-x-1">
                 <ShoppingCart className="w-3.5 h-3.5 text-amber-600" />
-                <span>Books to Sell (1 or Multiple)</span>
+                <span>Books to Sell ({cartItems.length})</span>
               </span>
               <button
                 type="button"
                 id="add-more-book-to-sale-btn"
                 onClick={handleAddCartItem}
-                className="text-[11px] font-bold text-amber-800 hover:text-amber-900 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-lg transition-colors"
+                className="text-[11px] font-bold text-amber-800 hover:text-amber-900 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-lg transition-colors shrink-0"
               >
                 + Add Another Book
               </button>
             </div>
 
+            <div className="max-h-64 sm:max-h-72 overflow-y-auto space-y-2.5 pr-0.5">
             {cartItems.map((item, index) => (
               <div
                 key={index}
@@ -352,6 +377,16 @@ export const SellBookModal: React.FC<SellBookModalProps> = ({ isOpen, onClose, p
                 )}
               </div>
             ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleAddCartItem}
+              className="w-full flex items-center justify-center gap-1.5 py-2 text-[11px] font-bold text-amber-800 bg-white border border-dashed border-amber-300 hover:bg-amber-50 rounded-xl transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add Another Book
+            </button>
           </div>
 
           {/* Pricing Summary & Payment Status Calculation */}
@@ -444,9 +479,10 @@ export const SellBookModal: React.FC<SellBookModalProps> = ({ isOpen, onClose, p
               className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-600"
             />
           </div>
+          </div>
 
-          {/* Action Buttons */}
-          <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100">
+          {/* Action Buttons — always visible */}
+          <div className="flex justify-end space-x-2 px-6 py-3 border-t border-slate-100 bg-white shrink-0">
             <button
               type="button"
               id="cancel-sell-modal-btn"
@@ -468,6 +504,7 @@ export const SellBookModal: React.FC<SellBookModalProps> = ({ isOpen, onClose, p
             </button>
           </div>
         </form>
+        )}
       </div>
     </div>
   );

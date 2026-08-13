@@ -17,6 +17,7 @@ import {
   PackageSearch,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { BookSaleRecord } from '../types';
 
 interface DashboardViewProps {
   setActiveTab: (tab: string) => void;
@@ -24,6 +25,8 @@ interface DashboardViewProps {
   openSellBookModal: () => void;
   openBorrowModal: () => void;
   openAddAssetModal: () => void;
+  openPrintInvoiceModal: (saleRecord: BookSaleRecord) => void;
+  openCollectPaymentModal: (saleRecord: BookSaleRecord) => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -32,8 +35,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   openSellBookModal,
   openBorrowModal,
   openAddAssetModal,
+  openPrintInvoiceModal,
+  openCollectPaymentModal,
 }) => {
   const { currentUser, books, borrowRecords, saleRecords, assets, logs } = useApp();
+  if (!currentUser) return null;
 
   // Metrics Calculations
   const totalBookTitles = books.length;
@@ -304,7 +310,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 .map((sale) => (
                   <div
                     key={sale.id}
-                    className="p-3 bg-white hover:bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between text-xs gap-2"
+                    role="button"
+                    tabIndex={0}
+                    id={`dash-pending-due-${sale.id}`}
+                    onClick={() => openPrintInvoiceModal(sale)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openPrintInvoiceModal(sale);
+                      }
+                    }}
+                    className="p-3 bg-white hover:bg-rose-50/50 flex flex-col sm:flex-row sm:items-center justify-between text-xs gap-2 cursor-pointer transition-colors"
                   >
                     <div>
                       <div className="font-bold text-slate-900 flex items-center space-x-2">
@@ -316,6 +332,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <div className="text-slate-500 text-[11px]">
                         Invoice #{sale.invoiceNo} &bull; Due: {sale.paymentDueDate || 'As agreed'}
                       </div>
+                      <div className="text-slate-500 text-[11px] mt-0.5 line-clamp-1">
+                        {sale.items.map((it) => `${it.quantity}x ${it.bookTitle}`).join(', ')}
+                      </div>
                     </div>
                     <div className="flex items-center space-x-3">
                       <div className="text-right">
@@ -324,7 +343,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       </div>
                       <button
                         id={`dash-collect-${sale.id}`}
-                        onClick={() => setActiveTab('pending-dues')}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openCollectPaymentModal(sale);
+                        }}
                         className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-[11px]"
                       >
                         Collect
@@ -335,7 +357,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {pendingSalesCount === 0 && (
                 <div className="p-4 text-center text-xs text-slate-500">
                   <CheckCircle2 className="w-5 h-5 text-emerald-600 mx-auto mb-1" />
-                  All sales payments are fully paid up! No pending dues.
+                  {totalSalesCount === 0
+                    ? 'No sales recorded yet. Create a book sale to track payments here.'
+                    : 'All sales payments are fully paid up! No pending dues.'}
                 </div>
               )}
             </div>
@@ -369,8 +393,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               ))}
               {lowStockBooks.length === 0 && (
                 <div className="text-xs text-slate-500 py-3 text-center">
-                  <PackageCheck className="w-6 h-6 text-emerald-600 mx-auto mb-1" />
-                  All books have healthy stock levels.
+                  {totalBookTitles === 0 ? (
+                    <>
+                      <PackageSearch className="w-6 h-6 text-slate-300 mx-auto mb-1" />
+                      No books in catalog yet. Add books to track inventory.
+                      <button
+                        type="button"
+                        onClick={openAddBookModal}
+                        className="mt-2 block mx-auto text-emerald-700 font-semibold hover:underline"
+                      >
+                        + Add Book
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <PackageCheck className="w-6 h-6 text-emerald-600 mx-auto mb-1" />
+                      All books have healthy stock levels.
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -414,8 +454,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               ))}
               {damagedAssets.length === 0 && (
                 <div className="text-xs text-slate-500 py-3 text-center">
-                  <CheckCircle2 className="w-6 h-6 text-emerald-600 mx-auto mb-1" />
-                  All office equipment and assets are operational.
+                  {totalAssetsCount === 0 ? (
+                    <>
+                      <Building2 className="w-6 h-6 text-slate-300 mx-auto mb-1" />
+                      No office assets registered yet.
+                      <button
+                        type="button"
+                        onClick={openAddAssetModal}
+                        className="mt-2 block mx-auto text-emerald-700 font-semibold hover:underline"
+                      >
+                        + Add Asset
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-6 h-6 text-emerald-600 mx-auto mb-1" />
+                      All office equipment and assets are operational.
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -438,6 +494,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <div className="text-slate-500 text-[11px] truncate">{log.details}</div>
                 </div>
               ))}
+              {logs.length === 0 && (
+                <div className="text-xs text-slate-500 py-3 text-center">
+                  No activity yet. Actions you take will appear here.
+                </div>
+              )}
             </div>
           </div>
         </div>

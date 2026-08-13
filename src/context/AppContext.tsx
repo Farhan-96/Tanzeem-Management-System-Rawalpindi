@@ -10,18 +10,26 @@ import {
   AssetStatus,
   SaleItem,
 } from '../types';
-import {
-  INITIAL_USERS,
-  INITIAL_BOOKS,
-  INITIAL_BORROW_RECORDS,
-  INITIAL_SALE_RECORDS,
-  INITIAL_OFFICE_ASSETS,
-  INITIAL_LOGS,
-} from '../data/mockData';
+import { api } from '../api/client';
+
+const AUTH_SESSION_KEY = 'tanzeem_auth_session';
 
 interface AppContextType {
-  currentUser: UserProfile;
+  currentUser: UserProfile | null;
   availableUsers: UserProfile[];
+  isAuthenticated: boolean;
+  authLoading: boolean;
+  dataLoading: boolean;
+  hasRegisteredUsers: boolean;
+  login: (email: string, password: string) => Promise<{ success: boolean; message: string }>;
+  register: (data: {
+    name: string;
+    email: string;
+    password: string;
+    role?: UserRole;
+    department?: string;
+  }) => Promise<{ success: boolean; message: string }>;
+  logout: () => void;
   switchUserRole: (role: UserRole) => void;
 
   books: Book[];
@@ -51,7 +59,7 @@ interface AppContextType {
     initialPayment: number;
     paymentDueDate?: string;
     remarks?: string;
-  }) => { success: boolean; invoiceNo?: string; message: string };
+  }) => { success: boolean; invoiceNo?: string; message: string; saleRecord?: BookSaleRecord };
   collectPayment: (saleId: string, amount: number, notes?: string) => void;
 
   assets: OfficeAsset[];
@@ -68,100 +76,191 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_KEY = 'tanzeem_library_inventory_v1';
+function persistError(err: unknown, label: string) {
+  console.error(`[DB] ${label}:`, err);
+}
+
+function saveSession(user: UserProfile) {
+  try {
+    sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(user));
+  } catch {
+    // ignore
+  }
+}
+
+function loadSession(): UserProfile | null {
+  try {
+    const raw = sessionStorage.getItem(AUTH_SESSION_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as UserProfile;
+  } catch {
+    return null;
+  }
+}
+
+function clearSession() {
+  try {
+    sessionStorage.removeItem(AUTH_SESSION_KEY);
+  } catch {
+    // ignore
+  }
+}
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<UserProfile>(INITIAL_USERS[0]); // Default Admin
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [availableUsers, setAvailableUsers] = useState<UserProfile[]>([]);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(false);
+  const [hasRegisteredUsers, setHasRegisteredUsers] = useState(false);
   const [books, setBooks] = useState<Book[]>([]);
   const [borrowRecords, setBorrowRecords] = useState<BookBorrowRecord[]>([]);
   const [saleRecords, setSaleRecords] = useState<BookSaleRecord[]>([]);
   const [assets, setAssets] = useState<OfficeAsset[]>([]);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
-  const [isInitialized, setIsInitialized] = useState(false);
 
-  // Initialize state from LocalStorage or Mock Seed Data
-  useEffect(() => {
+  const loadAppData = async () => {
+    setDataLoading(true);
     try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        setBooks(parsed.books || INITIAL_BOOKS);
-        setBorrowRecords(parsed.borrowRecords || INITIAL_BORROW_RECORDS);
-        setSaleRecords(parsed.saleRecords || INITIAL_SALE_RECORDS);
-        setAssets(parsed.assets || INITIAL_OFFICE_ASSETS);
-        setLogs(parsed.logs || INITIAL_LOGS);
-        if (parsed.currentUserId) {
-          const found = INITIAL_USERS.find((u) => u.id === parsed.currentUserId);
-          if (found) setCurrentUser(found);
-        }
-      } else {
-        setBooks(INITIAL_BOOKS);
-        setBorrowRecords(INITIAL_BORROW_RECORDS);
-        setSaleRecords(INITIAL_SALE_RECORDS);
-        setAssets(INITIAL_OFFICE_ASSETS);
-        setLogs(INITIAL_LOGS);
-      }
-    } catch (e) {
-      console.error('Failed to load from localStorage', e);
-      setBooks(INITIAL_BOOKS);
-      setBorrowRecords(INITIAL_BORROW_RECORDS);
-      setSaleRecords(INITIAL_SALE_RECORDS);
-      setAssets(INITIAL_OFFICE_ASSETS);
-      setLogs(INITIAL_LOGS);
+      const data = await api.getData();
+      setBooks((data.books || []) as Book[]);
+      setBorrowRecords((data.borrowRecords || []) as BookBorrowRecord[]);
+      setSaleRecords((data.saleRecords || []) as BookSaleRecord[]);
+      setAssets((data.assets || []) as OfficeAsset[]);
+      setLogs((data.logs || []) as ActivityLog[]);
+    } catch (err) {
+      persistError(err, 'loadAppData');
     } finally {
-      setIsInitialized(true);
+      setDataLoading(false);
     }
-  }, []);
+  };
 
-  // Save to LocalStorage on state update
   useEffect(() => {
-    if (!isInitialized) return;
-    try {
-      const dataToSave = {
-        books,
-        borrowRecords,
-        saleRecords,
-        assets,
-        logs,
-        currentUserId: currentUser.id,
-      };
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(dataToSave));
-    } catch (e) {
-      console.error('Failed to save to localStorage', e);
-    }
-  }, [books, borrowRecords, saleRecords, assets, logs, currentUser, isInitialized]);
+    const boot = async () => {
+      try {
+        const statusRes = await fetch('/api/auth/status');
+        if (statusRes.ok) {
+          const status = await statusRes.json();
+          setHasRegisteredUsers(Boolean(status.hasUsers));
+        }
+      } catch {
+        setHasRegisteredUsers(false);
+      }
+
+      const sessionUser = loadSession();
+      if (sessionUser) {
+        setCurrentUser(sessionUser);
+        setAvailableUsers([sessionUser]);
+        setHasRegisteredUsers(true);
+        await loadAppData();
+      }
+      setAuthLoading(false);
+    };
+
+    boot();
+  }, []);
 
   const addLog = (
     action: string,
     details: string,
-    module: 'Books' | 'Lending' | 'Sales' | 'Assets' | 'Auth'
+    module: 'Books' | 'Lending' | 'Sales' | 'Assets' | 'Auth',
+    actor?: UserProfile | null
   ) => {
+    const user = actor ?? currentUser;
+    if (!user) return;
+
     const newLog: ActivityLog = {
       id: `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       timestamp: new Date().toLocaleString('en-US', {
         dateStyle: 'medium',
         timeStyle: 'short',
       }),
-      userName: currentUser.name,
-      userRole: currentUser.role,
+      userName: user.name,
+      userRole: user.role,
       action,
       details,
       module,
     };
     setLogs((prev) => [newLog, ...prev]);
+    api.saveLog(newLog).catch((err) => persistError(err, 'saveLog'));
+  };
+
+  const login = async (email: string, password: string) => {
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, message: data.message || 'Login failed.' };
+      }
+      setCurrentUser(data.user);
+      setAvailableUsers([data.user]);
+      setHasRegisteredUsers(true);
+      saveSession(data.user);
+      await loadAppData();
+      addLog('System Sign In', 'Logged into Central Administrative Dashboard', 'Auth', data.user);
+      return { success: true, message: 'Signed in successfully.' };
+    } catch {
+      return {
+        success: false,
+        message: 'Cannot reach server. Start the API with npm run server.',
+      };
+    }
+  };
+
+  const register = async (data: {
+    name: string;
+    email: string;
+    password: string;
+    role?: UserRole;
+    department?: string;
+  }) => {
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const payload = await res.json();
+      if (!res.ok) {
+        return { success: false, message: payload.message || 'Registration failed.' };
+      }
+      setCurrentUser(payload.user);
+      setAvailableUsers([payload.user]);
+      setHasRegisteredUsers(true);
+      saveSession(payload.user);
+      await loadAppData();
+      addLog('Account Registered', `Created account for ${payload.user.email}`, 'Auth', payload.user);
+      return { success: true, message: 'Account created successfully.' };
+    } catch {
+      return {
+        success: false,
+        message: 'Cannot reach server. Start the API with npm run server.',
+      };
+    }
+  };
+
+  const logout = () => {
+    if (currentUser) {
+      addLog('System Sign Out', 'Signed out of the management system', 'Auth');
+    }
+    clearSession();
+    setCurrentUser(null);
+    setBooks([]);
+    setBorrowRecords([]);
+    setSaleRecords([]);
+    setAssets([]);
+    setLogs([]);
   };
 
   const switchUserRole = (role: UserRole) => {
-    const user = INITIAL_USERS.find((u) => u.role === role) || {
-      id: `usr-${role.toLowerCase()}`,
-      name: `${role} User`,
-      role,
-      email: `${role.toLowerCase()}@tanzeem.org`,
-      department: 'Management',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150',
-    };
-    setCurrentUser(user);
-    addLog('Role Switched', `Switched active profile role to ${role}`, 'Auth');
+    if (!currentUser) return;
+    const next = { ...currentUser, role };
+    setCurrentUser(next);
+    saveSession(next);
+    addLog('Role Switched', `Switched active profile role to ${role}`, 'Auth', next);
   };
 
   const addBook = (newBookData: Omit<Book, 'id' | 'availableQuantity' | 'addedDate'>) => {
@@ -175,6 +274,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     setBooks((prev) => [formattedBook, ...prev]);
+    api.saveBook(formattedBook).catch((err) => persistError(err, 'saveBook'));
     addLog(
       'New Book Added',
       `Added "${formattedBook.title}" by ${formattedBook.author} (${formattedBook.totalQuantity} copies, ISBN: ${formattedBook.isbn})`,
@@ -184,12 +284,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const updateBook = (updatedBook: Book) => {
     setBooks((prev) => prev.map((b) => (b.id === updatedBook.id ? updatedBook : b)));
+    api.updateBook(updatedBook).catch((err) => persistError(err, 'updateBook'));
     addLog('Book Updated', `Updated details for "${updatedBook.title}"`, 'Books');
   };
 
   const deleteBook = (bookId: string) => {
     const target = books.find((b) => b.id === bookId);
     setBooks((prev) => prev.filter((b) => b.id !== bookId));
+    api.deleteBook(bookId).catch((err) => persistError(err, 'deleteBook'));
     if (target) {
       addLog('Book Removed', `Removed book "${target.title}" from catalog`, 'Books');
     }
@@ -204,6 +306,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     expectedReturnDate: string;
     remarks?: string;
   }) => {
+    if (!currentUser) {
+      return { success: false, message: 'Please sign in first.' };
+    }
     const targetBook = books.find((b) => b.id === data.bookId);
     if (!targetBook) {
       return { success: false, message: 'Book not found in inventory.' };
@@ -212,14 +317,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return { success: false, message: `No available copies for "${targetBook.title}". All copies currently out.` };
     }
 
-    // Deduct stock
-    setBooks((prev) =>
-      prev.map((b) => (b.id === data.bookId ? { ...b, availableQuantity: b.availableQuantity - 1 } : b))
-    );
+    const updatedBook: Book = {
+      ...targetBook,
+      availableQuantity: targetBook.availableQuantity - 1,
+    };
 
-    const recordId = `brw-${Date.now()}`;
     const newRecord: BookBorrowRecord = {
-      id: recordId,
+      id: `brw-${Date.now()}`,
       bookId: targetBook.id,
       bookTitle: targetBook.title,
       bookIsbn: targetBook.isbn,
@@ -234,7 +338,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       issuedBy: currentUser.name,
     };
 
+    setBooks((prev) => prev.map((b) => (b.id === data.bookId ? updatedBook : b)));
     setBorrowRecords((prev) => [newRecord, ...prev]);
+    api.updateBook(updatedBook).catch((err) => persistError(err, 'updateBook'));
+    api.saveBorrow(newRecord).catch((err) => persistError(err, 'saveBorrow'));
     addLog(
       'Book Borrow Issued',
       `Issued "${targetBook.title}" to ${data.borrowerName} (${data.borrowerDept}). Expected return: ${data.expectedReturnDate}`,
@@ -249,26 +356,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!record) return;
 
     const today = new Date().toISOString().split('T')[0];
+    const updatedRecord: BookBorrowRecord = {
+      ...record,
+      status: 'Returned',
+      actualReturnDate: today,
+      remarks: remarks ? `${record.remarks ? record.remarks + ' | ' : ''}Return note: ${remarks}` : record.remarks,
+    };
 
-    // Update record
-    setBorrowRecords((prev) =>
-      prev.map((r) =>
-        r.id === recordId
-          ? {
-              ...r,
-              status: 'Returned',
-              actualReturnDate: today,
-              remarks: remarks ? `${r.remarks ? r.remarks + ' | ' : ''}Return note: ${remarks}` : r.remarks,
-            }
-          : r
-      )
-    );
+    const book = books.find((b) => b.id === record.bookId);
+    const updatedBook = book
+      ? { ...book, availableQuantity: book.availableQuantity + 1 }
+      : null;
 
-    // Restore stock
-    setBooks((prev) =>
-      prev.map((b) => (b.id === record.bookId ? { ...b, availableQuantity: b.availableQuantity + 1 } : b))
-    );
-
+    setBorrowRecords((prev) => prev.map((r) => (r.id === recordId ? updatedRecord : r)));
+    if (updatedBook) {
+      setBooks((prev) => prev.map((b) => (b.id === updatedBook.id ? updatedBook : b)));
+      api.updateBook(updatedBook).catch((err) => persistError(err, 'updateBook'));
+    }
+    api.updateBorrow(updatedRecord).catch((err) => persistError(err, 'updateBorrow'));
     addLog(
       'Book Returned',
       `Returned "${record.bookTitle}" from ${record.borrowerName}. Quantity restored.`,
@@ -286,7 +391,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     paymentDueDate?: string;
     remarks?: string;
   }) => {
-    // Validate inventory availability
+    if (!currentUser) {
+      return { success: false, message: 'Please sign in first.' };
+    }
+
     const saleItems: SaleItem[] = [];
     let subtotal = 0;
 
@@ -318,18 +426,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const remainingAmount = netAmount - paidAmount;
     const paymentStatus: 'Paid' | 'Payment Remaining' = remainingAmount <= 0 ? 'Paid' : 'Payment Remaining';
 
-    // Deduct total and available quantity
-    setBooks((prev) =>
-      prev.map((b) => {
-        const soldItem = data.items.find((i) => i.bookId === b.id);
-        if (soldItem) {
-          const newTotal = Math.max(0, b.totalQuantity - soldItem.quantity);
-          const newAvailable = Math.max(0, b.availableQuantity - soldItem.quantity);
-          return { ...b, totalQuantity: newTotal, availableQuantity: newAvailable };
-        }
-        return b;
-      })
-    );
+    const updatedBooks = books.map((b) => {
+      const soldItem = data.items.find((i) => i.bookId === b.id);
+      if (soldItem) {
+        const newTotal = Math.max(0, b.totalQuantity - soldItem.quantity);
+        const newAvailable = Math.max(0, b.availableQuantity - soldItem.quantity);
+        return { ...b, totalQuantity: newTotal, availableQuantity: newAvailable };
+      }
+      return b;
+    });
+    const changedBooks = updatedBooks.filter((b) => {
+      const soldItem = data.items.find((i) => i.bookId === b.id);
+      return Boolean(soldItem);
+    });
 
     const saleId = `sale-${Date.now()}`;
     const invoiceNo = `INV-2026-${Math.floor(100 + Math.random() * 900)}`;
@@ -368,8 +477,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       paymentHistory,
     };
 
+    setBooks(updatedBooks);
     setSaleRecords((prev) => [newSaleRecord, ...prev]);
-
+    api.saveBooksBatch(changedBooks).catch((err) => persistError(err, 'saveBooksBatch'));
+    api.saveSale(newSaleRecord).catch((err) => persistError(err, 'saveSale'));
     addLog(
       'Book Sale Completed',
       `Invoice ${invoiceNo} generated for ${data.customerName} (${data.unitName}). Total: Rs. ${netAmount}, Status: ${paymentStatus}${
@@ -382,10 +493,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       success: true,
       invoiceNo,
       message: `Sale registered successfully with Invoice #${invoiceNo}.`,
+      saleRecord: newSaleRecord,
     };
   };
 
   const collectPayment = (saleId: string, amount: number, notes?: string) => {
+    if (!currentUser) return;
     const sale = saleRecords.find((s) => s.id === saleId);
     if (!sale) return;
 
@@ -402,20 +515,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       notes: notes || 'Outstanding payment collection',
     };
 
-    setSaleRecords((prev) =>
-      prev.map((s) =>
-        s.id === saleId
-          ? {
-              ...s,
-              paidAmount: newPaidAmount,
-              remainingAmount: newRemainingAmount,
-              paymentStatus: newStatus,
-              paymentHistory: [...s.paymentHistory, newTransaction],
-            }
-          : s
-      )
-    );
+    const updatedSale: BookSaleRecord = {
+      ...sale,
+      paidAmount: newPaidAmount,
+      remainingAmount: newRemainingAmount,
+      paymentStatus: newStatus,
+      paymentHistory: [...sale.paymentHistory, newTransaction],
+    };
 
+    setSaleRecords((prev) => prev.map((s) => (s.id === saleId ? updatedSale : s)));
+    api.updateSale(updatedSale).catch((err) => persistError(err, 'updateSale'));
     addLog(
       'Payment Received',
       `Collected Rs. ${addedPayment} for Invoice ${sale.invoiceNo} (${sale.customerName}). Remaining balance: Rs. ${newRemainingAmount}`,
@@ -434,17 +543,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     setAssets((prev) => [newAsset, ...prev]);
+    api.saveAsset(newAsset).catch((err) => persistError(err, 'saveAsset'));
     addLog('Office Asset Added', `Added asset "${newAsset.name}" [${assetTag}] (${newAsset.category}, ${newAsset.status})`, 'Assets');
   };
 
   const updateAsset = (updatedAsset: OfficeAsset) => {
     setAssets((prev) => prev.map((a) => (a.id === updatedAsset.id ? updatedAsset : a)));
+    api.updateAsset(updatedAsset).catch((err) => persistError(err, 'updateAsset'));
     addLog('Office Asset Updated', `Updated asset "${updatedAsset.name}" [${updatedAsset.assetTag}]`, 'Assets');
   };
 
   const deleteAsset = (assetId: string) => {
     const target = assets.find((a) => a.id === assetId);
     setAssets((prev) => prev.filter((a) => a.id !== assetId));
+    api.deleteAsset(assetId).catch((err) => persistError(err, 'deleteAsset'));
     if (target) {
       addLog('Office Asset Removed', `Removed asset "${target.name}" [${target.assetTag}]`, 'Assets');
     }
@@ -454,19 +566,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const target = assets.find((a) => a.id === assetId);
     if (!target) return;
 
-    setAssets((prev) =>
-      prev.map((a) =>
-        a.id === assetId
-          ? {
-              ...a,
-              status,
-              remarks: remarks ? `${remarks}` : a.remarks,
-              lastInspectedDate: new Date().toISOString().split('T')[0],
-            }
-          : a
-      )
-    );
+    const updated: OfficeAsset = {
+      ...target,
+      status,
+      remarks: remarks ? `${remarks}` : target.remarks,
+      lastInspectedDate: new Date().toISOString().split('T')[0],
+    };
 
+    setAssets((prev) => prev.map((a) => (a.id === assetId ? updated : a)));
+    api.updateAsset(updated).catch((err) => persistError(err, 'updateAsset'));
     addLog(
       'Asset Status Changed',
       `Changed status of "${target.name}" [${target.assetTag}] to ${status}`,
@@ -478,37 +586,43 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const target = assets.find((a) => a.id === assetId);
     if (!target) return;
 
-    setAssets((prev) =>
-      prev.map((a) =>
-        a.id === assetId
-          ? {
-              ...a,
-              issuedToPerson: personName,
-              issuedToDept: deptName,
-            }
-          : a
-      )
-    );
+    const updated: OfficeAsset = {
+      ...target,
+      issuedToPerson: personName,
+      issuedToDept: deptName,
+    };
 
+    setAssets((prev) => prev.map((a) => (a.id === assetId ? updated : a)));
+    api.updateAsset(updated).catch((err) => persistError(err, 'updateAsset'));
     addLog('Asset Issued', `Assigned asset "${target.name}" [${target.assetTag}] to ${personName} (${deptName})`, 'Assets');
   };
 
   const resetAllData = () => {
-    localStorage.removeItem(LOCAL_STORAGE_KEY);
-    setBooks(INITIAL_BOOKS);
-    setBorrowRecords(INITIAL_BORROW_RECORDS);
-    setSaleRecords(INITIAL_SALE_RECORDS);
-    setAssets(INITIAL_OFFICE_ASSETS);
-    setLogs(INITIAL_LOGS);
-    setCurrentUser(INITIAL_USERS[0]);
-    addLog('Data Reset', 'Reset system inventory state to initial seed values', 'Auth');
+    api
+      .resetData()
+      .then(() => {
+        setBooks([]);
+        setBorrowRecords([]);
+        setSaleRecords([]);
+        setAssets([]);
+        setLogs([]);
+        addLog('Data Reset', 'Cleared all inventory data from database', 'Auth');
+      })
+      .catch((err) => persistError(err, 'resetData'));
   };
 
   return (
     <AppContext.Provider
       value={{
         currentUser,
-        availableUsers: INITIAL_USERS,
+        availableUsers,
+        isAuthenticated: Boolean(currentUser),
+        authLoading,
+        dataLoading,
+        hasRegisteredUsers,
+        login,
+        register,
+        logout,
         switchUserRole,
         books,
         addBook,

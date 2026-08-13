@@ -32,6 +32,7 @@ export const BookCatalogView: React.FC<BookCatalogViewProps> = ({
   openBorrowModal,
 }) => {
   const { books, deleteBook, currentUser } = useApp();
+  if (!currentUser) return null;
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedLanguage, setSelectedLanguage] = useState<string>('All');
@@ -265,9 +266,13 @@ export const BookCatalogView: React.FC<BookCatalogViewProps> = ({
         {filteredBooks.length === 0 && (
           <div className="col-span-full bg-white rounded-2xl p-12 text-center border border-slate-200">
             <BookOpen className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <h3 className="text-base font-bold text-slate-800">No books found matching criteria</h3>
+            <h3 className="text-base font-bold text-slate-800">
+              {books.length === 0 ? 'No books in catalog yet' : 'No books found matching criteria'}
+            </h3>
             <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-              Try adjusting your search query, clearing filters, or adding new books to the inventory.
+              {books.length === 0
+                ? 'Start by adding your first book title to the inventory.'
+                : 'Try adjusting your search query, clearing filters, or adding new books to the inventory.'}
             </p>
             <button
               onClick={openAddBookModal}

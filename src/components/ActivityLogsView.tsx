@@ -99,7 +99,9 @@ export const ActivityLogsView: React.FC = () => {
               {filteredLogs.length === 0 && (
                 <tr>
                   <td colSpan={5} className="p-8 text-center text-slate-500 text-xs">
-                    No activity logs found.
+                    {logs.length === 0
+                      ? 'No activity yet. Sign-ins, sales, lending, and asset changes will appear here.'
+                      : 'No activity logs found for current filters.'}
                   </td>
                 </tr>
               )}

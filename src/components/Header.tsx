@@ -12,7 +12,7 @@ import {
   FileText,
   ChevronDown,
   RefreshCw,
-  Sparkles,
+  LogOut,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { UserRole } from '../types';
@@ -34,10 +34,12 @@ export const Header: React.FC<HeaderProps> = ({
   openBorrowModal,
   openAddAssetModal,
 }) => {
-  const { currentUser, availableUsers, switchUserRole, books, borrowRecords, saleRecords, assets, resetAllData } =
+  const { currentUser, availableUsers, switchUserRole, books, borrowRecords, saleRecords, assets, resetAllData, logout } =
     useApp();
   const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+
+  if (!currentUser) return null;
 
   // Calculate quick notification counts
   const totalBooks = books.length;
@@ -136,32 +138,44 @@ export const Header: React.FC<HeaderProps> = ({
               {roleDropdownOpen && (
                 <div className="absolute right-0 mt-2 w-64 bg-[#002B1A] border border-amber-500/30 rounded-xl shadow-2xl py-2 z-50 text-xs">
                   <div className="px-3 py-1.5 text-[10px] font-bold text-amber-300 uppercase tracking-widest border-b border-emerald-800">
-                    Switch Role (System Auth)
+                    Account
                   </div>
-                  {availableUsers.map((user) => (
-                    <button
-                      key={user.id}
-                      id={`switch-role-${user.role.toLowerCase().replace(/\s+/g, '-')}`}
-                      onClick={() => {
-                        switchUserRole(user.role);
-                        setRoleDropdownOpen(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-emerald-800/80 transition-colors ${
-                        currentUser.role === user.role ? 'bg-emerald-800 text-amber-300 font-bold' : 'text-emerald-100'
-                      }`}
-                    >
-                      <div className="flex items-center space-x-2">
-                        <Users className="w-3.5 h-3.5 text-emerald-400" />
-                        <div>
-                          <div className="font-medium">{user.name}</div>
-                          <div className="text-[10px] text-emerald-300/80">{user.department}</div>
-                        </div>
+                  <div className="px-3 py-2 text-emerald-100 border-b border-emerald-800">
+                    <div className="font-medium">{currentUser.name}</div>
+                    <div className="text-[10px] text-emerald-300/80">{currentUser.email}</div>
+                    <div className="text-[10px] text-amber-300 mt-0.5">{currentUser.department}</div>
+                  </div>
+                  {availableUsers.length > 1 && (
+                    <>
+                      <div className="px-3 py-1.5 text-[10px] font-bold text-amber-300 uppercase tracking-widest border-b border-emerald-800">
+                        Switch Role
                       </div>
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-[#001D11] text-amber-300 border border-emerald-700 font-medium">
-                        {user.role}
-                      </span>
-                    </button>
-                  ))}
+                      {availableUsers.map((user) => (
+                        <button
+                          key={user.id}
+                          id={`switch-role-${user.role.toLowerCase().replace(/\s+/g, '-')}`}
+                          onClick={() => {
+                            switchUserRole(user.role);
+                            setRoleDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-emerald-800/80 transition-colors ${
+                            currentUser.role === user.role ? 'bg-emerald-800 text-amber-300 font-bold' : 'text-emerald-100'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-2">
+                            <Users className="w-3.5 h-3.5 text-emerald-400" />
+                            <div>
+                              <div className="font-medium">{user.name}</div>
+                              <div className="text-[10px] text-emerald-300/80">{user.department}</div>
+                            </div>
+                          </div>
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-[#001D11] text-amber-300 border border-emerald-700 font-medium">
+                            {user.role}
+                          </span>
+                        </button>
+                      ))}
+                    </>
+                  )}
                   <div className="border-t border-emerald-800 mt-1 pt-1 px-3">
                     <button
                       id="reset-demo-data-button"
@@ -173,6 +187,17 @@ export const Header: React.FC<HeaderProps> = ({
                     >
                       <RefreshCw className="w-3 h-3" />
                       <span>Reset Demo Seed Data</span>
+                    </button>
+                    <button
+                      id="logout-button"
+                      onClick={() => {
+                        setRoleDropdownOpen(false);
+                        logout();
+                      }}
+                      className="w-full text-left py-1.5 text-red-300 hover:text-red-200 flex items-center space-x-1.5 text-[11px] font-medium"
+                    >
+                      <LogOut className="w-3 h-3" />
+                      <span>Sign Out</span>
                     </button>
                   </div>
                 </div>

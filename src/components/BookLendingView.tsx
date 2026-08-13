@@ -204,7 +204,20 @@ export const BookLendingView: React.FC<BookLendingViewProps> = ({ openBorrowModa
               {filteredRecords.length === 0 && (
                 <tr>
                   <td colSpan={7} className="p-8 text-center text-slate-500 text-xs">
-                    No lending records found for current filters.
+                    {borrowRecords.length === 0 ? (
+                      <div className="space-y-2">
+                        <p>No lending records yet.</p>
+                        <button
+                          type="button"
+                          onClick={openBorrowModal}
+                          className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg text-xs"
+                        >
+                          + Issue First Loan
+                        </button>
+                      </div>
+                    ) : (
+                      'No lending records found for current filters.'
+                    )}
                   </td>
                 </tr>
               )}

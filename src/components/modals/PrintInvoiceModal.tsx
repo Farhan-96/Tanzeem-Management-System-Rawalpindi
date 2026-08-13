@@ -29,7 +29,7 @@ export const PrintInvoiceModal: React.FC<PrintInvoiceModalProps> = ({ isOpen, on
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto"
+      className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto print:static print:bg-white print:p-0 print:inset-auto print:overflow-visible"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose();
@@ -37,12 +37,17 @@ export const PrintInvoiceModal: React.FC<PrintInvoiceModalProps> = ({ isOpen, on
       }}
     >
       <div
-        className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 my-8"
+        className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 my-8 print:shadow-none print:border-0 print:rounded-none print:my-0 print:max-w-none print:p-0"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Controls Header */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4 print:hidden">
-          <h3 className="text-sm font-bold text-slate-800">Print Official Sales Receipt / Invoice</h3>
+          <div>
+            <h3 className="text-sm font-bold text-slate-800">Sales Invoice / Receipt</h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Use Print → Save as PDF to give this invoice to the customer.
+            </p>
+          </div>
           <div className="flex items-center space-x-2">
             <button
               type="button"
@@ -51,7 +56,7 @@ export const PrintInvoiceModal: React.FC<PrintInvoiceModalProps> = ({ isOpen, on
               className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg flex items-center space-x-1.5 shadow-sm cursor-pointer"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>Print Invoice</span>
+              <span>Print / Save PDF</span>
             </button>
             <button
               type="button"
@@ -66,7 +71,7 @@ export const PrintInvoiceModal: React.FC<PrintInvoiceModalProps> = ({ isOpen, on
         </div>
 
         {/* Printable Area */}
-        <div id="printable-invoice" className="p-6 border border-slate-200 rounded-2xl bg-white space-y-6 text-xs text-slate-800">
+        <div id="printable-invoice" className="p-6 border border-slate-200 rounded-2xl bg-white space-y-6 text-xs text-slate-800 print:border-0 print:p-0 print:rounded-none">
           {/* Institutional Header */}
           <div className="text-center border-b border-slate-200 pb-4">
             <div className="w-10 h-10 mx-auto rounded-xl bg-emerald-900 text-amber-300 font-serif font-bold text-xl flex items-center justify-center mb-2">
@@ -89,12 +94,16 @@ export const PrintInvoiceModal: React.FC<PrintInvoiceModalProps> = ({ isOpen, on
               <span className="text-[10px] text-slate-400 font-bold block uppercase">Invoice Details</span>
               <div className="font-mono font-extrabold text-slate-900 text-sm">#{saleRecord.invoiceNo}</div>
               <div className="text-slate-600">Date: {saleRecord.saleDate}</div>
+              {saleRecord.paymentDueDate && !isPaid && (
+                <div className="text-rose-700 font-semibold">Payment Due: {saleRecord.paymentDueDate}</div>
+              )}
               <div className="mt-1">
                 <span
-                  className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${
                     isPaid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'
                   }`}
                 >
+                  {isPaid ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
                   Status: {saleRecord.paymentStatus}
                 </span>
               </div>
@@ -115,7 +124,10 @@ export const PrintInvoiceModal: React.FC<PrintInvoiceModalProps> = ({ isOpen, on
               <tbody className="divide-y divide-slate-100">
                 {saleRecord.items.map((it, idx) => (
                   <tr key={idx}>
-                    <td className="p-2 font-medium text-slate-800">{it.bookTitle}</td>
+                    <td className="p-2 font-medium text-slate-800">
+                      <div>{it.bookTitle}</div>
+                      {it.isbn && <div className="text-[10px] text-slate-400 font-mono">ISBN: {it.isbn}</div>}
+                    </td>
                     <td className="p-2 text-center font-bold">{it.quantity}</td>
                     <td className="p-2 text-right font-mono">Rs. {it.unitPrice.toLocaleString()}</td>
                     <td className="p-2 text-right font-bold text-slate-900">
@@ -156,6 +168,44 @@ export const PrintInvoiceModal: React.FC<PrintInvoiceModalProps> = ({ isOpen, on
               )}
             </div>
           </div>
+
+          {/* Payment history */}
+          {saleRecord.paymentHistory.length > 0 && (
+            <div className="border border-slate-200 rounded-xl overflow-hidden">
+              <div className="bg-slate-50 px-3 py-2 text-[10px] font-bold uppercase text-slate-500 tracking-wider">
+                Payment History
+              </div>
+              <div className="divide-y divide-slate-100">
+                {saleRecord.paymentHistory.map((p) => (
+                  <div key={p.id} className="px-3 py-2 flex justify-between gap-3">
+                    <div>
+                      <span className="font-semibold text-emerald-800">Rs. {p.amount.toLocaleString()}</span>
+                      <span className="text-slate-500"> &bull; {p.receivedBy}</span>
+                      {p.notes && <div className="text-[10px] text-slate-400">{p.notes}</div>}
+                    </div>
+                    <span className="text-slate-400 shrink-0">{p.date}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {(saleRecord.remarks || saleRecord.soldBy) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px] text-slate-600">
+              {saleRecord.soldBy && (
+                <div>
+                  <span className="font-bold text-slate-400 uppercase text-[10px] block">Sold By</span>
+                  {saleRecord.soldBy}
+                </div>
+              )}
+              {saleRecord.remarks && (
+                <div>
+                  <span className="font-bold text-slate-400 uppercase text-[10px] block">Remarks</span>
+                  {saleRecord.remarks}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Footer Note */}
           <div className="pt-4 border-t border-slate-200 text-center text-[10px] text-slate-400">

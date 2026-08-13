@@ -127,6 +127,33 @@ export const BorrowBookModal: React.FC<BorrowBookModalProps> = ({ isOpen, onClos
           </div>
         )}
 
+        {books.length === 0 ? (
+          <div className="p-6 text-center space-y-3">
+            <BookOpen className="w-10 h-10 text-slate-300 mx-auto" />
+            <p className="text-sm font-semibold text-slate-800">No books available to borrow</p>
+            <p className="text-xs text-slate-500">Add books to the catalog first, then issue a loan.</p>
+            <button
+              type="button"
+              onClick={handleClose}
+              className="px-4 py-2 bg-emerald-700 text-white text-xs font-bold rounded-xl hover:bg-emerald-800"
+            >
+              Close
+            </button>
+          </div>
+        ) : availableBooks.length === 0 ? (
+          <div className="p-6 text-center space-y-3">
+            <AlertCircle className="w-10 h-10 text-amber-500 mx-auto" />
+            <p className="text-sm font-semibold text-slate-800">No copies currently available</p>
+            <p className="text-xs text-slate-500">All books are checked out. Wait for a return or add more stock.</p>
+            <button
+              type="button"
+              onClick={handleClose}
+              className="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-200"
+            >
+              Close
+            </button>
+          </div>
+        ) : (
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           {/* Select Book */}
           <div>
@@ -243,6 +270,7 @@ export const BorrowBookModal: React.FC<BorrowBookModalProps> = ({ isOpen, onClos
             </button>
           </div>
         </form>
+        )}
       </div>
     </div>
   );

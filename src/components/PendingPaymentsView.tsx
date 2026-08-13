@@ -119,7 +119,11 @@ export const PendingPaymentsView: React.FC<PendingPaymentsViewProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredPendingSales.map((sale) => (
-                <tr key={sale.id} className="hover:bg-amber-50/30 transition-colors">
+                <tr
+                  key={sale.id}
+                  className="hover:bg-amber-50/30 transition-colors cursor-pointer"
+                  onClick={() => openPrintInvoiceModal(sale)}
+                >
                   {/* Customer */}
                   <td className="p-3.5">
                     <div className="font-bold text-slate-900 flex items-center space-x-1.5">
@@ -169,7 +173,7 @@ export const PendingPaymentsView: React.FC<PendingPaymentsViewProps> = ({
                   <td className="p-3.5 text-slate-600 font-medium">{sale.paymentDueDate || 'Not set'}</td>
 
                   {/* Action */}
-                  <td className="p-3.5 text-right space-x-1">
+                  <td className="p-3.5 text-right space-x-1" onClick={(e) => e.stopPropagation()}>
                     <button
                       id={`collect-due-${sale.id}`}
                       onClick={() => openCollectPaymentModal(sale)}
@@ -193,7 +197,11 @@ export const PendingPaymentsView: React.FC<PendingPaymentsViewProps> = ({
                 <tr>
                   <td colSpan={8} className="p-12 text-center text-slate-500 text-xs">
                     <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
-                    No remaining payment dues found! All sales payments are fully clear.
+                    {saleRecords.length === 0
+                      ? 'No sales yet — pending dues will appear after a partial-payment sale.'
+                      : pendingSales.length === 0
+                        ? 'No remaining payment dues found! All sales payments are fully clear.'
+                        : 'No pending dues match your search.'}
                   </td>
                 </tr>
               )}

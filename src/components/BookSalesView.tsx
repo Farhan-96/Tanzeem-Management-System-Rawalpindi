@@ -214,7 +214,20 @@ export const BookSalesView: React.FC<BookSalesViewProps> = ({
               {filteredSales.length === 0 && (
                 <tr>
                   <td colSpan={7} className="p-8 text-center text-slate-500 text-xs">
-                    No sales invoice records found.
+                    {saleRecords.length === 0 ? (
+                      <div className="space-y-2">
+                        <p>No sales invoices yet.</p>
+                        <button
+                          type="button"
+                          onClick={openSellBookModal}
+                          className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-emerald-950 font-bold rounded-lg text-xs"
+                        >
+                          + Record First Sale
+                        </button>
+                      </div>
+                    ) : (
+                      'No sales invoice records found for current filters.'
+                    )}
                   </td>
                 </tr>
               )}

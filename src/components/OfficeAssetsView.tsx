@@ -27,6 +27,7 @@ interface OfficeAssetsViewProps {
 
 export const OfficeAssetsView: React.FC<OfficeAssetsViewProps> = ({ openAddAssetModal }) => {
   const { assets, updateAssetStatus, assignAsset, deleteAsset, currentUser } = useApp();
+  if (!currentUser) return null;
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
@@ -247,7 +248,21 @@ export const OfficeAssetsView: React.FC<OfficeAssetsViewProps> = ({ openAddAsset
 
         {filteredAssets.length === 0 && (
           <div className="col-span-full bg-white rounded-2xl p-12 text-center border border-slate-200 text-slate-500 text-xs">
-            No office assets found matching filter criteria.
+            {assets.length === 0 ? (
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-slate-800">No office assets registered yet</p>
+                <p>Add computers, furniture, and other equipment to track them here.</p>
+                <button
+                  type="button"
+                  onClick={openAddAssetModal}
+                  className="mt-2 px-4 py-2 bg-emerald-700 text-white font-bold text-xs rounded-xl hover:bg-emerald-800"
+                >
+                  + Add First Asset
+                </button>
+              </div>
+            ) : (
+              'No office assets found matching filter criteria.'
+            )}
           </div>
         )}
       </div>
