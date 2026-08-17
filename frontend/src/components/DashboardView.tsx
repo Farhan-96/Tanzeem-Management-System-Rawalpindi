@@ -15,6 +15,7 @@ import {
   DollarSign,
   PackageCheck,
   PackageSearch,
+  PackagePlus,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { BookSaleRecord } from '../types';
@@ -22,6 +23,7 @@ import { BookSaleRecord } from '../types';
 interface DashboardViewProps {
   setActiveTab: (tab: string) => void;
   openAddBookModal: () => void;
+  openRecordArrivalModal: () => void;
   openSellBookModal: () => void;
   openBorrowModal: () => void;
   openAddAssetModal: () => void;
@@ -32,13 +34,14 @@ interface DashboardViewProps {
 export const DashboardView: React.FC<DashboardViewProps> = ({
   setActiveTab,
   openAddBookModal,
+  openRecordArrivalModal,
   openSellBookModal,
   openBorrowModal,
   openAddAssetModal,
   openPrintInvoiceModal,
   openCollectPaymentModal,
 }) => {
-  const { currentUser, books, borrowRecords, saleRecords, assets, logs } = useApp();
+  const { currentUser, books, borrowRecords, saleRecords, arrivalRecords, assets, logs } = useApp();
   if (!currentUser) return null;
 
   // Metrics Calculations
@@ -55,6 +58,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const totalPaidRevenue = saleRecords.reduce((sum, s) => sum + s.paidAmount, 0);
   const totalPendingDues = saleRecords.reduce((sum, s) => sum + s.remainingAmount, 0);
   const pendingSalesCount = saleRecords.filter((s) => s.paymentStatus === 'Payment Remaining').length;
+
+  const unpaidArrivals = arrivalRecords.filter((r) => r.paymentStatus !== 'Paid');
+  const unpaidArrivalAmount = arrivalRecords.reduce((sum, r) => sum + r.remainingAmount, 0);
+  const arrivalCopies = arrivalRecords.reduce((sum, r) => sum + r.quantity, 0);
 
   const totalAssetsCount = assets.length;
   const totalAssetItems = assets.reduce((sum, a) => sum + a.quantity, 0);
@@ -88,14 +95,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
           {/* Quick Action Hub */}
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              id="dash-add-book-btn"
-              onClick={openAddBookModal}
-              className="bg-emerald-900/90 hover:bg-emerald-800 text-emerald-100 text-xs font-semibold px-3.5 py-2 rounded-lg border border-emerald-700 shadow-xs transition-colors flex items-center space-x-1.5"
-            >
-              <BookOpen className="w-4 h-4 text-amber-400" />
-              <span>+ Add Book</span>
-            </button>
+          <button
+            id="dash-add-book-btn"
+            onClick={openAddBookModal}
+            className="bg-emerald-900/90 hover:bg-emerald-800 text-emerald-100 text-xs font-semibold px-3.5 py-2 rounded-lg border border-emerald-700 shadow-xs transition-colors flex items-center space-x-1.5"
+          >
+            <BookOpen className="w-4 h-4 text-amber-400" />
+            <span>+ Add Book</span>
+          </button>
+          <button
+            id="dash-record-arrival-btn"
+            onClick={openRecordArrivalModal}
+            className="bg-emerald-900/90 hover:bg-emerald-800 text-emerald-100 text-xs font-semibold px-3.5 py-2 rounded-lg border border-emerald-700 shadow-xs transition-colors flex items-center space-x-1.5"
+          >
+            <PackagePlus className="w-4 h-4 text-amber-400" />
+            <span>+ Record Arrival</span>
+          </button>
             <button
               id="dash-sell-book-btn"
               onClick={openSellBookModal}
@@ -110,7 +125,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className="bg-emerald-900/90 hover:bg-emerald-800 text-emerald-100 text-xs font-semibold px-3.5 py-2 rounded-lg border border-emerald-700 shadow-xs transition-colors flex items-center space-x-1.5"
             >
               <RotateCcw className="w-4 h-4 text-amber-400" />
-              <span>+ Issue Loan</span>
+              <span>+ Lend Book</span>
             </button>
             <button
               id="dash-add-asset-btn"
@@ -138,7 +153,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="mt-2">
-            <div className="text-2xl font-bold text-slate-900">{totalBookTitles} Titles</div>
+            <div className="text-2xl font-bold text-slate-900">{totalBookTitles} Books</div>
             <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100">
               <span>
                 Available: <strong className="text-emerald-600 font-bold">{totalAvailableCopies}</strong> / {totalBookCopies}
@@ -156,7 +171,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-amber-300 transition-all cursor-pointer group"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500">Active Loans</span>
+            <span className="text-xs font-medium text-slate-500">Books Issued</span>
             <div className="p-2 bg-amber-50 text-amber-600 rounded-lg group-hover:bg-amber-500 group-hover:text-black transition-colors">
               <RotateCcw className="w-4 h-4" />
             </div>
@@ -171,7 +186,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     {overdueBorrows.length} Overdue
                   </>
                 ) : (
-                  'All loans on schedule'
+                  'All returns on time'
                 )}
               </span>
               <span className="text-amber-600 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center">
@@ -198,10 +213,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
             <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100">
               <span>
-                <strong>{pendingSalesCount}</strong> Pending Records
+                <strong>{pendingSalesCount}</strong> Unpaid invoices
               </span>
               <span className="text-rose-600 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center">
-                Dues <ArrowRight className="w-3 h-3 ml-0.5" />
+                Open <ArrowRight className="w-3 h-3 ml-0.5" />
               </span>
             </div>
           </div>
@@ -219,7 +234,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="mt-2">
-            <div className="text-2xl font-bold text-slate-900">{totalAssetsCount} Groups</div>
+            <div className="text-2xl font-bold text-slate-900">{totalAssetsCount} Assets</div>
             <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100">
               <span>
                 <strong className="text-emerald-600">{workingAssetsCount}</strong> Functional &bull;{' '}
@@ -229,6 +244,34 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 Assets <ArrowRight className="w-3 h-3 ml-0.5" />
               </span>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div
+        onClick={() => setActiveTab('arrivals')}
+        className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-emerald-300 transition-all cursor-pointer group"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-emerald-50 text-emerald-700 rounded-lg group-hover:bg-emerald-700 group-hover:text-white transition-colors">
+              <PackagePlus className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="text-xs font-medium text-slate-500">Incoming Book Arrivals</div>
+              <div className="text-lg font-bold text-slate-900">
+                {arrivalRecords.length} shipments · {arrivalCopies} copies received
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center justify-between sm:justify-end gap-4 text-[11px] text-slate-500">
+            <span>
+              Unpaid: <strong className={unpaidArrivals.length > 0 ? 'text-rose-600' : 'text-emerald-600'}>{unpaidArrivals.length}</strong>
+              {unpaidArrivalAmount > 0 ? ` · Rs. ${unpaidArrivalAmount.toLocaleString()} due` : ''}
+            </span>
+            <span className="text-emerald-700 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center">
+              Arrivals <ArrowRight className="w-3 h-3 ml-0.5" />
+            </span>
           </div>
         </div>
       </div>
@@ -269,9 +312,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
             </div>
             <div className="p-4 rounded-xl bg-rose-50/60 border border-rose-200">
-              <div className="text-[10px] font-bold text-rose-700 uppercase tracking-wider">Outstanding Balance</div>
+              <div className="text-[10px] font-bold text-rose-700 uppercase tracking-wider">Amount Still Due</div>
               <div className="text-xl font-bold text-rose-800 mt-1">Rs. {totalPendingDues.toLocaleString()}</div>
-              <div className="text-[11px] text-rose-700 mt-1">{pendingSalesCount} clients pending dues</div>
+              <div className="text-[11px] text-rose-700 mt-1">{pendingSalesCount} unpaid invoices</div>
             </div>
           </div>
 
@@ -481,7 +524,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm">
             <h3 className="text-sm font-bold text-slate-800 flex items-center space-x-2 mb-3">
               <Clock className="w-4 h-4 text-indigo-600" />
-              <span>System Activity Audit</span>
+              <span>Recent Activity</span>
             </h3>
             <div className="space-y-3">
               {logs.slice(0, 3).map((log) => (

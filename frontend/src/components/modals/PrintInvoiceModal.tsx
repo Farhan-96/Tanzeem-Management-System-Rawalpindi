@@ -1,6 +1,7 @@
-import React, { useEffect } from 'react';
-import { Printer, X, CheckCircle2, AlertCircle } from 'lucide-react';
+import React from 'react';
+import { Printer, CheckCircle2, AlertCircle } from 'lucide-react';
 import { BookSaleRecord } from '../../types';
+import { Modal, ModalHeader, ModalBody } from './Modal';
 
 interface PrintInvoiceModalProps {
   isOpen: boolean;
@@ -9,16 +10,6 @@ interface PrintInvoiceModalProps {
 }
 
 export const PrintInvoiceModal: React.FC<PrintInvoiceModalProps> = ({ isOpen, onClose, saleRecord }) => {
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
-
   if (!isOpen || !saleRecord) return null;
 
   const handlePrint = () => {
@@ -28,48 +19,28 @@ export const PrintInvoiceModal: React.FC<PrintInvoiceModalProps> = ({ isOpen, on
   const isPaid = saleRecord.paymentStatus === 'Paid';
 
   return (
-    <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto print:static print:bg-white print:p-0 print:inset-auto print:overflow-visible"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          onClose();
-        }
-      }}
-    >
-      <div
-        className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 my-8 print:shadow-none print:border-0 print:rounded-none print:my-0 print:max-w-none print:p-0"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Modal Controls Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4 print:hidden">
-          <div>
+    <Modal isOpen={isOpen} onClose={onClose} maxWidth="max-w-xl" printFriendly>
+      <ModalHeader onClose={onClose} closeId="close-print-invoice-modal">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0 print:hidden">
+          <div className="min-w-0">
             <h3 className="text-sm font-bold text-slate-800">Sales Invoice / Receipt</h3>
             <p className="text-[11px] text-slate-500 mt-0.5">
               Use Print → Save as PDF to give this invoice to the customer.
             </p>
           </div>
-          <div className="flex items-center space-x-2">
-            <button
-              type="button"
-              id="trigger-print-btn"
-              onClick={handlePrint}
-              className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg flex items-center space-x-1.5 shadow-sm cursor-pointer"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Print / Save PDF</span>
-            </button>
-            <button
-              type="button"
-              id="close-print-invoice-modal"
-              onClick={onClose}
-              className="text-slate-400 hover:text-slate-600 font-bold p-1 cursor-pointer transition-colors rounded-lg hover:bg-slate-100"
-              aria-label="Close modal"
-            >
-              <X className="w-5 h-5 pointer-events-none" />
-            </button>
-          </div>
+          <button
+            type="button"
+            id="trigger-print-btn"
+            onClick={handlePrint}
+            className="self-start sm:self-auto px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg flex items-center space-x-1.5 shadow-sm cursor-pointer shrink-0"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>Print / Save PDF</span>
+          </button>
         </div>
+      </ModalHeader>
 
+      <ModalBody>
         {/* Printable Area */}
         <div id="printable-invoice" className="p-6 border border-slate-200 rounded-2xl bg-white space-y-6 text-xs text-slate-800 print:border-0 print:p-0 print:rounded-none">
           {/* Institutional Header */}
@@ -82,7 +53,7 @@ export const PrintInvoiceModal: React.FC<PrintInvoiceModalProps> = ({ isOpen, on
           </div>
 
           {/* Invoice Info Bar */}
-          <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
             <div>
               <span className="text-[10px] text-slate-400 font-bold block uppercase">Billed To</span>
               <div className="font-bold text-slate-900 text-sm">{saleRecord.customerName}</div>
@@ -90,7 +61,7 @@ export const PrintInvoiceModal: React.FC<PrintInvoiceModalProps> = ({ isOpen, on
               {saleRecord.customerPhone && <div className="text-slate-500 font-mono">{saleRecord.customerPhone}</div>}
             </div>
 
-            <div className="text-right">
+            <div className="text-left sm:text-right">
               <span className="text-[10px] text-slate-400 font-bold block uppercase">Invoice Details</span>
               <div className="font-mono font-extrabold text-slate-900 text-sm">#{saleRecord.invoiceNo}</div>
               <div className="text-slate-600">Date: {saleRecord.saleDate}</div>
@@ -104,15 +75,15 @@ export const PrintInvoiceModal: React.FC<PrintInvoiceModalProps> = ({ isOpen, on
                   }`}
                 >
                   {isPaid ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
-                  Status: {saleRecord.paymentStatus}
+                  Status: {isPaid ? 'Paid' : 'Unpaid'}
                 </span>
               </div>
             </div>
           </div>
 
           {/* Items Table */}
-          <div>
-            <table className="w-full text-left text-xs border border-slate-200 rounded-lg overflow-hidden">
+          <div className="overflow-x-auto -mx-1">
+            <table className="w-full min-w-[320px] text-left text-xs border border-slate-200 rounded-lg overflow-hidden">
               <thead className="bg-slate-100 text-slate-600 font-bold uppercase text-[10px]">
                 <tr>
                   <th className="p-2">Item Description</th>
@@ -141,7 +112,7 @@ export const PrintInvoiceModal: React.FC<PrintInvoiceModalProps> = ({ isOpen, on
 
           {/* Breakdown */}
           <div className="flex justify-end">
-            <div className="w-64 space-y-1.5 text-xs">
+            <div className="w-full sm:w-64 space-y-1.5 text-xs">
               <div className="flex justify-between text-slate-600">
                 <span>Subtotal:</span>
                 <span className="font-mono">Rs. {saleRecord.subtotal.toLocaleString()}</span>
@@ -212,7 +183,7 @@ export const PrintInvoiceModal: React.FC<PrintInvoiceModalProps> = ({ isOpen, on
             Thank you for your cooperation & support with Tanzeem Library & Records. &bull; Computer Generated Invoice.
           </div>
         </div>
-      </div>
-    </div>
+      </ModalBody>
+    </Modal>
   );
 };

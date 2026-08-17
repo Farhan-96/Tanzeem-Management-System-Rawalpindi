@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Receipt, X, Plus, Trash2, AlertCircle, ShoppingCart } from 'lucide-react';
+import { Receipt, Plus, Trash2, AlertCircle, ShoppingCart } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { Book, BookSaleRecord } from '../../types';
+import { Book, BookSaleRecord, StoredAttachment } from '../../types';
+import { Modal, ModalHeader, ModalBody, ModalFooter } from './Modal';
+import { AttachmentPicker } from '../AttachmentPicker';
+import { BookNameSearch } from '../BookNameSearch';
 
 interface SellBookModalProps {
   isOpen: boolean;
   onClose: () => void;
   preselectedBook?: Book | null;
+  saleToEdit?: BookSaleRecord | null;
   openPrintInvoiceModal?: (saleRecord: BookSaleRecord) => void;
 }
 
@@ -22,9 +26,11 @@ export const SellBookModal: React.FC<SellBookModalProps> = ({
   isOpen,
   onClose,
   preselectedBook,
+  saleToEdit,
   openPrintInvoiceModal,
 }) => {
-  const { books, createBookSale } = useApp();
+  const { books, saleRecords, createBookSale, updateBookSale, currentUser } = useApp();
+  const isEditMode = Boolean(saleToEdit);
 
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
@@ -36,6 +42,8 @@ export const SellBookModal: React.FC<SellBookModalProps> = ({
 
   const [cartItems, setCartItems] = useState<SaleCartItem[]>([]);
   const [errorMessage, setErrorMessage] = useState('');
+  const [paymentFiles, setPaymentFiles] = useState<StoredAttachment[]>([]);
+  const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
 
   const handleClose = () => {
     setCustomerName('');
@@ -45,73 +53,119 @@ export const SellBookModal: React.FC<SellBookModalProps> = ({
     setRemarks('');
     setErrorMessage('');
     setCartItems([]);
+    setPaymentFiles([]);
+    setShowCustomerSuggestions(false);
     onClose();
   };
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        handleClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen]);
+    if (!isOpen) return;
 
-  useEffect(() => {
-    if (isOpen) {
-      setErrorMessage('');
-      if (preselectedBook) {
-        setCartItems([
-          {
-            bookId: preselectedBook.id,
-            bookTitle: preselectedBook.title,
-            maxStock: preselectedBook.totalQuantity,
-            unitPrice: preselectedBook.price,
-            quantity: 1,
-          },
-        ]);
-        setInitialPayment(preselectedBook.price);
-      } else if (books.length > 0 && cartItems.length === 0) {
-        const firstAvailable = books.find((b) => b.totalQuantity > 0);
-        if (firstAvailable) {
-          setCartItems([
-            {
-              bookId: firstAvailable.id,
-              bookTitle: firstAvailable.title,
-              maxStock: firstAvailable.totalQuantity,
-              unitPrice: firstAvailable.price,
-              quantity: 1,
-            },
-          ]);
-          setInitialPayment(firstAvailable.price);
-        }
-      }
+    setErrorMessage('');
 
-      // Set default 15-day payment due date
-      const due = new Date();
-      due.setDate(due.getDate() + 15);
-      setPaymentDueDate(due.toISOString().split('T')[0]);
+    if (saleToEdit) {
+      setCustomerName(saleToEdit.customerName);
+      setCustomerPhone(saleToEdit.customerPhone || '');
+      setUnitName(saleToEdit.unitName);
+      setDiscount(saleToEdit.discount);
+      setInitialPayment(saleToEdit.paidAmount);
+      setPaymentDueDate(saleToEdit.paymentDueDate || '');
+      setRemarks(saleToEdit.remarks || '');
+      setCartItems(
+        saleToEdit.items.map((item) => {
+          const book = books.find((b) => b.id === item.bookId);
+          const restored = item.quantity;
+          return {
+            bookId: item.bookId,
+            bookTitle: item.bookTitle,
+            maxStock: (book?.totalQuantity || 0) + restored,
+            unitPrice: item.unitPrice,
+            quantity: item.quantity,
+          };
+        })
+      );
+      return;
     }
-  }, [isOpen, preselectedBook]);
 
-  if (!isOpen) return null;
+    setCustomerName('');
+    setCustomerPhone('');
+    setUnitName('Central Office');
+    setDiscount(0);
+    setInitialPayment(0);
+    setRemarks('');
+    setCartItems([]);
 
-  const handleAddCartItem = () => {
-    const available = books.find((b) => !cartItems.some((item) => item.bookId === b.id) && b.totalQuantity > 0);
-    if (available) {
-      setCartItems((prev) => [
-        ...prev,
+    if (preselectedBook) {
+      setCartItems([
         {
-          bookId: available.id,
-          bookTitle: available.title,
-          maxStock: available.totalQuantity,
-          unitPrice: available.price,
+          bookId: preselectedBook.id,
+          bookTitle: preselectedBook.title,
+          maxStock: preselectedBook.totalQuantity,
+          unitPrice: preselectedBook.price,
           quantity: 1,
         },
       ]);
+      setInitialPayment(preselectedBook.price);
+    } else {
+      setCartItems([
+        {
+          bookId: '',
+          bookTitle: '',
+          maxStock: 0,
+          unitPrice: 0,
+          quantity: 1,
+        },
+      ]);
+      setInitialPayment(0);
     }
+
+    const due = new Date();
+    due.setDate(due.getDate() + 15);
+    setPaymentDueDate(due.toISOString().split('T')[0]);
+  }, [isOpen, preselectedBook, saleToEdit]);
+
+  if (!isOpen) return null;
+
+  const restoredQtyFor = (bookId: string) =>
+    saleToEdit?.items.find((item) => item.bookId === bookId)?.quantity || 0;
+
+  const effectiveStock = (book: Book) => book.totalQuantity + restoredQtyFor(book.id);
+
+  const handleAddCartItem = () => {
+    setCartItems((prev) => [
+      ...prev,
+      {
+        bookId: '',
+        bookTitle: '',
+        maxStock: 0,
+        unitPrice: 0,
+        quantity: 1,
+      },
+    ]);
   };
+
+  const pastCustomers = Array.from(
+    new Map(
+      saleRecords.map((sale) => [
+        `${sale.customerName.trim().toLowerCase()}|${sale.unitName.trim().toLowerCase()}`,
+        {
+          name: sale.customerName,
+          phone: sale.customerPhone || '',
+          unitName: sale.unitName,
+        },
+      ])
+    ).values()
+  );
+
+  const customerQuery = customerName.trim().toLowerCase();
+  const matchedCustomers = pastCustomers.filter((person) => {
+    if (!customerQuery) return true;
+    return (
+      person.name.toLowerCase().includes(customerQuery) ||
+      person.unitName.toLowerCase().includes(customerQuery) ||
+      person.phone.includes(customerQuery)
+    );
+  });
 
   const handleRemoveCartItem = (index: number) => {
     setCartItems((prev) => prev.filter((_, i) => i !== index));
@@ -127,7 +181,7 @@ export const SellBookModal: React.FC<SellBookModalProps> = ({
                 ...item,
                 bookId: selectedBook.id,
                 bookTitle: selectedBook.title,
-                maxStock: selectedBook.totalQuantity,
+                maxStock: effectiveStock(selectedBook),
                 unitPrice: selectedBook.price,
                 quantity: 1,
               }
@@ -159,8 +213,8 @@ export const SellBookModal: React.FC<SellBookModalProps> = ({
     e.preventDefault();
     setErrorMessage('');
 
-    if (cartItems.length === 0) {
-      setErrorMessage('Please add at least one book to the sale order.');
+    if (cartItems.length === 0 || cartItems.some((item) => !item.bookId)) {
+      setErrorMessage('Please search and select at least one book.');
       return;
     }
     if (!customerName || !unitName) {
@@ -168,20 +222,35 @@ export const SellBookModal: React.FC<SellBookModalProps> = ({
       return;
     }
 
-    const result = createBookSale({
-      customerName,
-      customerPhone,
-      unitName,
-      items: cartItems.map((i) => ({
-        bookId: i.bookId,
-        quantity: i.quantity,
-        unitPrice: i.unitPrice,
-      })),
-      discount: discountVal,
-      initialPayment: paidVal,
-      paymentDueDate: willBePaid ? undefined : paymentDueDate,
-      remarks,
-    });
+    const result = isEditMode && saleToEdit
+      ? updateBookSale(saleToEdit.id, {
+          customerName,
+          customerPhone,
+          unitName,
+          items: cartItems.map((i) => ({
+            bookId: i.bookId,
+            quantity: i.quantity,
+            unitPrice: i.unitPrice,
+          })),
+          discount: discountVal,
+          paymentDueDate: remainingVal <= 0 ? undefined : paymentDueDate,
+          remarks,
+        })
+      : createBookSale({
+          customerName,
+          customerPhone,
+          unitName,
+          items: cartItems.map((i) => ({
+            bookId: i.bookId,
+            quantity: i.quantity,
+            unitPrice: i.unitPrice,
+          })),
+          discount: discountVal,
+          initialPayment: paidVal,
+          paymentDueDate: willBePaid ? undefined : paymentDueDate,
+          remarks,
+          paymentAttachments: paymentFiles,
+        });
 
     if (!result.success) {
       setErrorMessage(result.message);
@@ -190,70 +259,54 @@ export const SellBookModal: React.FC<SellBookModalProps> = ({
 
     const createdSale = result.saleRecord;
     handleClose();
-    if (createdSale && openPrintInvoiceModal) {
+    if (!isEditMode && createdSale && openPrintInvoiceModal) {
       openPrintInvoiceModal(createdSale);
     }
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-start justify-center p-4 z-50 overflow-y-auto"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          handleClose();
-        }
-      }}
-    >
-      <div
-        className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 my-4 relative max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between border-b border-slate-100 px-6 pt-6 pb-3 shrink-0">
-          <div className="flex items-center space-x-2">
-            <Receipt className="w-5 h-5 text-amber-600" />
-            <h3 className="text-lg font-bold text-slate-900 font-serif">Create Permanent Book Sale (Purpose 2)</h3>
-          </div>
-          <button
-            type="button"
-            id="close-sell-modal-btn"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              handleClose();
-            }}
-            className="text-slate-400 hover:text-slate-600 font-bold p-1 cursor-pointer transition-colors rounded-lg hover:bg-slate-100"
-            aria-label="Close modal"
-          >
-            <X className="w-5 h-5 pointer-events-none" />
-          </button>
+    <Modal isOpen={isOpen} onClose={handleClose} maxWidth="max-w-2xl">
+      <ModalHeader onClose={handleClose} closeId="close-sell-modal-btn">
+        <div className="flex items-center space-x-2 min-w-0">
+          <Receipt className="w-5 h-5 text-amber-600 shrink-0" />
+          <h3 className="text-base sm:text-lg font-bold text-slate-900 font-serif">
+            {isEditMode ? `Update Sale ${saleToEdit?.invoiceNo}` : 'Record Book Sale'}
+          </h3>
         </div>
+      </ModalHeader>
 
-        {errorMessage && (
-          <div className="mx-6 mt-4 p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center space-x-2 shrink-0">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{errorMessage}</span>
-          </div>
-        )}
+      {errorMessage && (
+        <div className="mx-4 sm:mx-6 mt-4 p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center space-x-2 shrink-0">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{errorMessage}</span>
+        </div>
+      )}
 
-        {books.length === 0 ? (
-          <div className="p-6 text-center space-y-3">
-            <ShoppingCart className="w-10 h-10 text-slate-300 mx-auto" />
-            <p className="text-sm font-semibold text-slate-800">No books available to sell</p>
-            <p className="text-xs text-slate-500">Add books to the catalog before creating a sale invoice.</p>
+      {books.length === 0 ? (
+        <>
+          <ModalBody>
+            <div className="text-center space-y-3 py-4">
+              <ShoppingCart className="w-10 h-10 text-slate-300 mx-auto" />
+              <p className="text-sm font-semibold text-slate-800">No books available to sell</p>
+              <p className="text-xs text-slate-500">Add books to the catalog before creating a sale invoice.</p>
+            </div>
+          </ModalBody>
+          <ModalFooter>
             <button
               type="button"
               onClick={handleClose}
-              className="px-4 py-2 bg-emerald-700 text-white text-xs font-bold rounded-xl hover:bg-emerald-800"
+              className="w-full sm:w-auto px-4 py-2.5 bg-emerald-700 text-white text-xs font-bold rounded-xl hover:bg-emerald-800"
             >
               Close
             </button>
-          </div>
-        ) : (
+          </ModalFooter>
+        </>
+      ) : (
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 text-xs">
-          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
+          <ModalBody className="space-y-4">
           {/* Customer & Unit Details */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
+            <div className="relative">
               <label className="block font-semibold text-slate-700 mb-1">
                 Customer / Person Name <span className="text-rose-500">*</span>
               </label>
@@ -261,11 +314,43 @@ export const SellBookModal: React.FC<SellBookModalProps> = ({
                 id="sale-customer-name-input"
                 type="text"
                 required
-                placeholder="e.g. Sheikh Zayd Al-Mansoor"
+                autoComplete="off"
+                placeholder="Type to search or enter a name"
                 value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
+                onFocus={() => setShowCustomerSuggestions(true)}
+                onChange={(e) => {
+                  setCustomerName(e.target.value);
+                  setShowCustomerSuggestions(true);
+                }}
+                onBlur={() => {
+                  window.setTimeout(() => setShowCustomerSuggestions(false), 150);
+                }}
                 className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-600"
               />
+              {showCustomerSuggestions && matchedCustomers.length > 0 && (
+                <div className="absolute left-0 right-0 top-full mt-1 z-30 max-h-44 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+                  {matchedCustomers.slice(0, 12).map((person) => (
+                    <button
+                      key={`${person.name}-${person.unitName}`}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setCustomerName(person.name);
+                        setUnitName(person.unitName);
+                        if (person.phone) setCustomerPhone(person.phone);
+                        setShowCustomerSuggestions(false);
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-amber-50 border-b border-slate-100 last:border-b-0"
+                    >
+                      <div className="font-semibold text-slate-800">{person.name}</div>
+                      <div className="text-[11px] text-slate-500">
+                        {person.unitName}
+                        {person.phone ? ` · ${person.phone}` : ''}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">
@@ -310,7 +395,7 @@ export const SellBookModal: React.FC<SellBookModalProps> = ({
               </button>
             </div>
 
-            <div className="max-h-64 sm:max-h-72 overflow-y-auto space-y-2.5 pr-0.5">
+            <div className="space-y-2.5">
             {cartItems.map((item, index) => (
               <div
                 key={index}
@@ -319,17 +404,14 @@ export const SellBookModal: React.FC<SellBookModalProps> = ({
                 {/* Book Select */}
                 <div className="flex-1 w-full">
                   <label className="text-[10px] font-semibold text-slate-400 block uppercase">Book Name</label>
-                  <select
-                    value={item.bookId}
-                    onChange={(e) => handleItemBookChange(index, e.target.value)}
-                    className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 cursor-pointer"
-                  >
-                    {books.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.title} (In Stock: {b.totalQuantity})
-                      </option>
-                    ))}
-                  </select>
+                  <BookNameSearch
+                    books={books}
+                    selectedBookId={item.bookId}
+                    excludeIds={cartItems.map((row) => row.bookId).filter(Boolean)}
+                    getStock={effectiveStock}
+                    placeholder="Type book name to search..."
+                    onSelect={(book) => handleItemBookChange(index, book.id)}
+                  />
                 </div>
 
                 {/* Price */}
@@ -419,6 +501,17 @@ export const SellBookModal: React.FC<SellBookModalProps> = ({
           </div>
 
           {/* Payment Collected & Due Date logic */}
+          {isEditMode ? (
+            <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-amber-900">Already collected</span>
+                <span className="font-extrabold text-emerald-800">Rs. {saleToEdit?.paidAmount.toLocaleString()}</span>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1">
+                Remaining due updates automatically from the new total. Use Collect Payment to add more money later.
+              </p>
+            </div>
+          ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-amber-50/60 rounded-xl border border-amber-200">
             <div>
               <label className="block font-semibold text-amber-900 mb-1">
@@ -443,7 +536,7 @@ export const SellBookModal: React.FC<SellBookModalProps> = ({
                     willBePaid ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-200 text-amber-900'
                   }`}
                 >
-                  {willBePaid ? 'Paid' : 'Payment Remaining'}
+                  {willBePaid ? 'Paid' : 'Unpaid'}
                 </span>
                 <span className="font-extrabold text-rose-700">
                   {remainingVal > 0 ? `Due: Rs. ${remainingVal.toLocaleString()}` : 'Full Clear'}
@@ -451,6 +544,7 @@ export const SellBookModal: React.FC<SellBookModalProps> = ({
               </div>
             </div>
           </div>
+          )}
 
           {!willBePaid && (
             <div>
@@ -468,6 +562,17 @@ export const SellBookModal: React.FC<SellBookModalProps> = ({
             </div>
           )}
 
+          {!isEditMode && (
+            <AttachmentPicker
+              label="Payment proof (PDF or image)"
+              hint="Save bank slip, receipt, or screenshot showing paid / unpaid status."
+              kind="payment-proof"
+              value={paymentFiles}
+              onChange={setPaymentFiles}
+              uploadedBy={currentUser?.name}
+            />
+          )}
+
           {/* Remarks */}
           <div>
             <label className="block font-semibold text-slate-700 mb-1">Remarks / Note</label>
@@ -479,10 +584,9 @@ export const SellBookModal: React.FC<SellBookModalProps> = ({
               className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-600"
             />
           </div>
-          </div>
+          </ModalBody>
 
-          {/* Action Buttons — always visible */}
-          <div className="flex justify-end space-x-2 px-6 py-3 border-t border-slate-100 bg-white shrink-0">
+          <ModalFooter>
             <button
               type="button"
               id="cancel-sell-modal-btn"
@@ -491,21 +595,20 @@ export const SellBookModal: React.FC<SellBookModalProps> = ({
                 e.stopPropagation();
                 handleClose();
               }}
-              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl cursor-pointer transition-colors"
+              className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl cursor-pointer transition-colors"
             >
               Cancel
             </button>
             <button
               id="submit-create-sale-btn"
               type="submit"
-              className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-emerald-950 font-extrabold rounded-xl shadow-md"
+              className="w-full sm:w-auto px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-emerald-950 font-extrabold rounded-xl shadow-md"
             >
-              Complete Sale & Deduct Stock
+              {isEditMode ? 'Save Changes' : 'Save Sale'}
             </button>
-          </div>
+          </ModalFooter>
         </form>
-        )}
-      </div>
-    </div>
+      )}
+    </Modal>
   );
 };

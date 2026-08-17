@@ -23,7 +23,7 @@ export const ActivityLogsView: React.FC = () => {
       <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-2">
-            <h2 className="text-xl font-bold text-slate-900 font-serif">System Activity Audit Log</h2>
+            <h2 className="text-xl font-bold text-slate-900 font-serif">Activity Log</h2>
             <span className="text-xs font-semibold bg-slate-100 text-slate-800 px-2.5 py-0.5 rounded-full border border-slate-200">
               {logs.length} Total Events
             </span>
@@ -56,10 +56,11 @@ export const ActivityLogsView: React.FC = () => {
         >
           <option value="All">All Modules</option>
           <option value="Books">Books</option>
-          <option value="Lending">Lending</option>
+          <option value="Arrivals">Arrivals</option>
+          <option value="Lending">Issued Books</option>
           <option value="Sales">Sales</option>
           <option value="Assets">Assets</option>
-          <option value="Auth">Auth & System</option>
+          <option value="Auth">Sign-in & System</option>
         </select>
       </div>
 

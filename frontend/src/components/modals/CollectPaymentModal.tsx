@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { DollarSign, X, CheckCircle2, AlertCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { DollarSign } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { BookSaleRecord } from '../../types';
+import { BookSaleRecord, StoredAttachment } from '../../types';
+import { Modal, ModalHeader, ModalBody, ModalFooter } from './Modal';
+import { AttachmentPicker } from '../AttachmentPicker';
 
 interface CollectPaymentModalProps {
   isOpen: boolean;
@@ -14,25 +16,17 @@ export const CollectPaymentModal: React.FC<CollectPaymentModalProps> = ({
   onClose,
   saleRecord,
 }) => {
-  const { collectPayment } = useApp();
+  const { collectPayment, currentUser } = useApp();
   const [paymentAmount, setPaymentAmount] = useState<number | ''>('');
   const [notes, setNotes] = useState('');
+  const [attachments, setAttachments] = useState<StoredAttachment[]>([]);
 
   const handleClose = () => {
     setPaymentAmount('');
     setNotes('');
+    setAttachments([]);
     onClose();
   };
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        handleClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen]);
 
   if (!isOpen || !saleRecord) return null;
 
@@ -40,52 +34,30 @@ export const CollectPaymentModal: React.FC<CollectPaymentModalProps> = ({
     e.preventDefault();
     if (paymentAmount === '' || Number(paymentAmount) <= 0) return;
 
-    collectPayment(saleRecord.id, Number(paymentAmount), notes || 'Dues collection');
+    collectPayment(saleRecord.id, Number(paymentAmount), notes || 'Dues collection', attachments);
     handleClose();
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          handleClose();
-        }
-      }}
-    >
-      <div
-        className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-          <div className="flex items-center space-x-2">
-            <DollarSign className="w-5 h-5 text-amber-600" />
-            <h3 className="text-lg font-bold text-slate-900 font-serif">Collect Outstanding Dues</h3>
-          </div>
-          <button
-            type="button"
-            id="close-collect-pay-modal"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              handleClose();
-            }}
-            className="text-slate-400 hover:text-slate-600 font-bold p-1 cursor-pointer transition-colors rounded-lg hover:bg-slate-100"
-            aria-label="Close modal"
-          >
-            <X className="w-5 h-5 pointer-events-none" />
-          </button>
+    <Modal isOpen={isOpen} onClose={handleClose} maxWidth="max-w-md">
+      <ModalHeader onClose={handleClose} closeId="close-collect-pay-modal">
+        <div className="flex items-center space-x-2 min-w-0">
+          <DollarSign className="w-5 h-5 text-amber-600 shrink-0" />
+          <h3 className="text-base sm:text-lg font-bold text-slate-900 font-serif">Collect Payment</h3>
         </div>
+      </ModalHeader>
 
+      <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 text-xs">
+        <ModalBody className="space-y-4">
         {/* Invoice Summary Box */}
-        <div className="bg-amber-50/80 p-3.5 rounded-xl border border-amber-200 text-xs space-y-1.5 mb-4">
+        <div className="bg-amber-50/80 p-3.5 rounded-xl border border-amber-200 text-xs space-y-1.5">
           <div className="flex justify-between">
             <span className="text-slate-500 font-semibold">Invoice No:</span>
             <span className="font-mono font-bold text-slate-900">{saleRecord.invoiceNo}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-slate-500 font-semibold">Customer / Unit:</span>
-            <span className="font-bold text-slate-900">
+          <div className="flex justify-between gap-2">
+            <span className="text-slate-500 font-semibold shrink-0">Customer / Unit:</span>
+            <span className="font-bold text-slate-900 text-right break-words">
               {saleRecord.customerName} ({saleRecord.unitName})
             </span>
           </div>
@@ -103,7 +75,6 @@ export const CollectPaymentModal: React.FC<CollectPaymentModalProps> = ({
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           <div>
             <label className="block font-semibold text-slate-700 mb-1">
               Payment Amount Collecting Now (Rs.) <span className="text-rose-500">*</span>
@@ -132,29 +103,38 @@ export const CollectPaymentModal: React.FC<CollectPaymentModalProps> = ({
             />
           </div>
 
-          <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100">
-            <button
-              type="button"
-              id="cancel-collect-pay-btn"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                handleClose();
-              }}
-              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl cursor-pointer transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              id="submit-collect-payment-btn"
-              type="submit"
-              className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl shadow-md"
-            >
-              Record Payment Receipt
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+          <AttachmentPicker
+            label="Payment proof (PDF or image)"
+            hint="Save bank slip, receipt, or screenshot showing this amount was paid."
+            kind="payment-proof"
+            value={attachments}
+            onChange={setAttachments}
+            uploadedBy={currentUser?.name}
+          />
+        </ModalBody>
+
+        <ModalFooter>
+          <button
+            type="button"
+            id="cancel-collect-pay-btn"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleClose();
+            }}
+            className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl cursor-pointer transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            id="submit-collect-payment-btn"
+            type="submit"
+            className="w-full sm:w-auto px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl shadow-md"
+          >
+            Save Payment
+          </button>
+        </ModalFooter>
+      </form>
+    </Modal>
   );
 };

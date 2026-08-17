@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Building2, X, Tag, MapPin, Calendar, DollarSign } from 'lucide-react';
+import React, { useState } from 'react';
+import { Building2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { AssetCategory, AssetStatus } from '../../types';
+import { AssetCategory, AssetStatus, StoredAttachment } from '../../types';
+import { Modal, ModalHeader, ModalBody, ModalFooter } from './Modal';
+import { AttachmentPicker } from '../AttachmentPicker';
 
 interface AddAssetModalProps {
   isOpen: boolean;
@@ -9,7 +11,7 @@ interface AddAssetModalProps {
 }
 
 export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose }) => {
-  const { addAsset } = useApp();
+  const { addAsset, currentUser } = useApp();
 
   const [name, setName] = useState('');
   const [assetTag, setAssetTag] = useState('');
@@ -21,6 +23,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
   const [purchaseCost, setPurchaseCost] = useState<number | ''>(0);
   const [serialNumber, setSerialNumber] = useState('');
   const [remarks, setRemarks] = useState('');
+  const [attachments, setAttachments] = useState<StoredAttachment[]>([]);
 
   const handleClose = () => {
     setName('');
@@ -28,18 +31,9 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
     setIssuedToPerson('');
     setRemarks('');
     setSerialNumber('');
+    setAttachments([]);
     onClose();
   };
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        handleClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -59,45 +53,23 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
       purchaseCost: Number(purchaseCost) || 0,
       serialNumber,
       remarks,
+      attachments,
     });
 
     handleClose();
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          handleClose();
-        }
-      }}
-    >
-      <div
-        className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 my-8"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-          <div className="flex items-center space-x-2">
-            <Building2 className="w-5 h-5 text-teal-700" />
-            <h3 className="text-lg font-bold text-slate-900 font-serif">Add Office Asset Record</h3>
-          </div>
-          <button
-            type="button"
-            id="close-add-asset-modal"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              handleClose();
-            }}
-            className="text-slate-400 hover:text-slate-600 font-bold p-1 cursor-pointer transition-colors rounded-lg hover:bg-slate-100"
-            aria-label="Close modal"
-          >
-            <X className="w-5 h-5 pointer-events-none" />
-          </button>
+    <Modal isOpen={isOpen} onClose={handleClose} maxWidth="max-w-lg">
+      <ModalHeader onClose={handleClose} closeId="close-add-asset-modal">
+        <div className="flex items-center space-x-2 min-w-0">
+          <Building2 className="w-5 h-5 text-teal-700 shrink-0" />
+          <h3 className="text-base sm:text-lg font-bold text-slate-900 font-serif">Add Office Asset</h3>
         </div>
+      </ModalHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+      <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 text-xs">
+        <ModalBody className="space-y-4">
           {/* Asset Name */}
           <div>
             <label className="block font-semibold text-slate-700 mb-1">
@@ -236,29 +208,39 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             />
           </div>
 
-          <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100">
-            <button
-              type="button"
-              id="cancel-add-asset-btn"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                handleClose();
-              }}
-              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl cursor-pointer transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              id="submit-add-asset-btn"
-              type="submit"
-              className="px-5 py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-xl shadow-md"
-            >
-              Save Asset Record
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+          <AttachmentPicker
+            label="Bills, invoices, photos, or PDFs"
+            hint="Store purchase bills, warranty papers, or photos with this asset."
+            kind="asset-document"
+            value={attachments}
+            onChange={setAttachments}
+            uploadedBy={currentUser?.name}
+          />
+
+        </ModalBody>
+
+        <ModalFooter>
+          <button
+            type="button"
+            id="cancel-add-asset-btn"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleClose();
+            }}
+            className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl cursor-pointer transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            id="submit-add-asset-btn"
+            type="submit"
+            className="w-full sm:w-auto px-5 py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-xl shadow-md"
+          >
+            Save Asset
+          </button>
+        </ModalFooter>
+      </form>
+    </Modal>
   );
 };

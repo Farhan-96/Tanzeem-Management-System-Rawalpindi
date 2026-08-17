@@ -1,15 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BookOpen, X } from 'lucide-react';
+import { BookOpen, AlertCircle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import type { Book } from '../../types';
+import { Modal, ModalHeader, ModalBody, ModalFooter } from './Modal';
 
 interface AddBookModalProps {
   isOpen: boolean;
   onClose: () => void;
+  bookToEdit?: Book | null;
 }
 
-export const AddBookModal: React.FC<AddBookModalProps> = ({ isOpen, onClose }) => {
+export const AddBookModal: React.FC<AddBookModalProps> = ({ isOpen, onClose, bookToEdit }) => {
   const { books, addBook, updateBook } = useApp();
+  const isEditMode = Boolean(bookToEdit);
 
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
@@ -23,6 +26,7 @@ export const AddBookModal: React.FC<AddBookModalProps> = ({ isOpen, onClose }) =
   const [description, setDescription] = useState('');
   const [existingBookId, setExistingBookId] = useState<string | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const titleFieldRef = useRef<HTMLDivElement>(null);
 
@@ -50,12 +54,18 @@ export const AddBookModal: React.FC<AddBookModalProps> = ({ isOpen, onClose }) =
     setDescription('');
     setExistingBookId(null);
     setShowSuggestions(false);
+    setErrorMessage('');
+    setShelfLocation('Shelf A-01');
   };
 
   const handleClose = () => {
     resetForm();
     onClose();
   };
+
+  const issuedCopies = bookToEdit
+    ? Math.max(0, bookToEdit.totalQuantity - bookToEdit.availableQuantity)
+    : 0;
 
   const fillFromBook = (book: Book) => {
     setExistingBookId(book.id);
@@ -77,20 +87,6 @@ export const AddBookModal: React.FC<AddBookModalProps> = ({ isOpen, onClose }) =
   };
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        if (showSuggestions) {
-          setShowSuggestions(false);
-          return;
-        }
-        handleClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, showSuggestions]);
-
-  useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (titleFieldRef.current && !titleFieldRef.current.contains(e.target as Node)) {
         setShowSuggestions(false);
@@ -100,16 +96,77 @@ export const AddBookModal: React.FC<AddBookModalProps> = ({ isOpen, onClose }) =
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    if (!isOpen) return;
+
+    if (bookToEdit) {
+      setTitle(bookToEdit.title);
+      setAuthor(bookToEdit.author);
+      setPublisher(bookToEdit.publisher);
+      setPrice(bookToEdit.price);
+      setTotalQuantity(bookToEdit.totalQuantity);
+      setIsbn(bookToEdit.isbn);
+      setCategory(bookToEdit.category);
+      setShelfLocation(bookToEdit.shelfLocation);
+      setLanguage(bookToEdit.language);
+      setDescription(bookToEdit.description || '');
+      setExistingBookId(null);
+      setShowSuggestions(false);
+      setErrorMessage('');
+    } else {
+      resetForm();
+    }
+  }, [isOpen, bookToEdit]);
+
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage('');
+
     if (!title || !author || !publisher || !category.trim() || !language.trim() || price === '' || totalQuantity === '') return;
 
     const qty = Number(totalQuantity);
-    if (qty < 1) return;
+    if (qty < 1) {
+      setErrorMessage('Stock quantity must be at least 1.');
+      return;
+    }
 
-    if (existingBook) {
+    const trimmedIsbn = isbn.trim();
+    const isbnTaken = books.some(
+      (b) =>
+        trimmedIsbn &&
+        b.isbn.trim().toLowerCase() === trimmedIsbn.toLowerCase() &&
+        b.id !== (bookToEdit?.id || existingBook?.id)
+    );
+    if (isbnTaken) {
+      setErrorMessage('This ISBN / tracking code is already used by another book.');
+      return;
+    }
+
+    if (isEditMode && bookToEdit) {
+      if (qty < issuedCopies) {
+        setErrorMessage(
+          `Total stock cannot be less than ${issuedCopies} issued cop${issuedCopies === 1 ? 'y' : 'ies'}.`
+        );
+        return;
+      }
+
+      updateBook({
+        ...bookToEdit,
+        title: title.trim(),
+        author: author.trim(),
+        publisher: publisher.trim(),
+        price: Number(price),
+        totalQuantity: qty,
+        availableQuantity: qty - issuedCopies,
+        isbn: trimmedIsbn || bookToEdit.isbn,
+        category: category.trim(),
+        shelfLocation: shelfLocation.trim() || bookToEdit.shelfLocation,
+        language: language.trim(),
+        description: description.trim(),
+      });
+    } else if (existingBook) {
       updateBook({
         ...existingBook,
         title,
@@ -143,41 +200,29 @@ export const AddBookModal: React.FC<AddBookModalProps> = ({ isOpen, onClose }) =
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          handleClose();
-        }
-      }}
-    >
-      <div
-        className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 my-8"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-          <div className="flex items-center space-x-2">
-            <BookOpen className="w-5 h-5 text-emerald-700" />
-            <h3 className="text-lg font-bold text-slate-900 font-serif">
-              {existingBook ? 'Add Stock to Existing Book' : 'Add New Book Record (Bulk or Single)'}
-            </h3>
-          </div>
-          <button
-            type="button"
-            id="close-add-book-modal-btn"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              handleClose();
-            }}
-            className="text-slate-400 hover:text-slate-600 font-bold p-1 cursor-pointer transition-colors rounded-lg hover:bg-slate-100"
-            aria-label="Close modal"
-          >
-            <X className="w-5 h-5 pointer-events-none" />
-          </button>
+    <Modal isOpen={isOpen} onClose={handleClose} maxWidth="max-w-xl">
+      <ModalHeader onClose={handleClose} closeId="close-add-book-modal-btn">
+        <div className="flex items-center space-x-2 min-w-0">
+          <BookOpen className={`w-5 h-5 shrink-0 ${isEditMode ? 'text-amber-600' : 'text-emerald-700'}`} />
+          <h3 className="text-base sm:text-lg font-bold text-slate-900 font-serif">
+            {isEditMode
+              ? 'Update Book Record'
+              : existingBook
+              ? 'Add Stock to Existing Book'
+              : 'Add New Book'}
+          </h3>
         </div>
+      </ModalHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+      <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 text-xs">
+        {errorMessage && (
+          <div className="mx-4 sm:mx-6 mt-4 p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center space-x-2 shrink-0">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
+
+        <ModalBody className="space-y-4">
           {/* Title with existing-book suggestions */}
           <div ref={titleFieldRef} className="relative">
             <label className="block font-semibold text-slate-700 mb-1">
@@ -187,18 +232,20 @@ export const AddBookModal: React.FC<AddBookModalProps> = ({ isOpen, onClose }) =
               type="text"
               required
               autoComplete="off"
-              placeholder="Type or select an existing book..."
+              placeholder={isEditMode ? 'Book title' : 'Type or select an existing book...'}
               value={title}
-              onFocus={() => setShowSuggestions(true)}
+              onFocus={() => {
+                if (!isEditMode) setShowSuggestions(true);
+              }}
               onChange={(e) => {
                 setTitle(e.target.value);
                 if (existingBookId) clearExistingSelection();
-                setShowSuggestions(true);
+                if (!isEditMode) setShowSuggestions(true);
               }}
               className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
             />
 
-            {showSuggestions && books.length > 0 && (
+            {!isEditMode && showSuggestions && books.length > 0 && (
               <div className="absolute left-0 right-0 top-full mt-1 z-20 max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
                 {filteredBooks.length === 0 ? (
                   <p className="px-3 py-2.5 text-slate-500">No matching books — a new record will be created.</p>
@@ -220,7 +267,14 @@ export const AddBookModal: React.FC<AddBookModalProps> = ({ isOpen, onClose }) =
               </div>
             )}
 
-            {existingBook && (
+            {isEditMode && bookToEdit && (
+              <p className="mt-1.5 text-[11px] text-slate-500 font-medium">
+                Editing catalog record · {issuedCopies} cop{issuedCopies === 1 ? 'y' : 'ies'} currently issued
+                {issuedCopies > 0 ? ` · available will become ${Math.max(0, Number(totalQuantity || 0) - issuedCopies)}` : ''}.
+              </p>
+            )}
+
+            {!isEditMode && existingBook && (
               <p className="mt-1.5 text-[11px] text-emerald-700 font-medium">
                 Existing book selected — quantity below will be added to current stock ({existingBook.totalQuantity} copies).
               </p>
@@ -230,12 +284,9 @@ export const AddBookModal: React.FC<AddBookModalProps> = ({ isOpen, onClose }) =
           {/* Author & Publisher Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                Author Name <span className="text-rose-500">*</span>
-              </label>
+              <label className="block font-semibold text-slate-700 mb-1">Author Name (Optional)</label>
               <input
                 type="text"
-                required
                 placeholder="e.g. Dr. Israr Ahmad"
                 value={author}
                 onChange={(e) => setAuthor(e.target.value)}
@@ -243,12 +294,9 @@ export const AddBookModal: React.FC<AddBookModalProps> = ({ isOpen, onClose }) =
               />
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                Publisher Name <span className="text-rose-500">*</span>
-              </label>
+              <label className="block font-semibold text-slate-700 mb-1">Publisher Name (Optional)</label>
               <input
                 type="text"
-                required
                 placeholder="e.g. Markazi Anjuman Khuddam-ul-Quran"
                 value={publisher}
                 onChange={(e) => setPublisher(e.target.value)}
@@ -275,13 +323,17 @@ export const AddBookModal: React.FC<AddBookModalProps> = ({ isOpen, onClose }) =
             </div>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">
-                {existingBook ? 'Quantity to Add' : 'Initial Stock Quantity (Bulk or 1)'}{' '}
+                {isEditMode
+                  ? 'Total Stock Quantity'
+                  : existingBook
+                  ? 'Quantity to Add'
+                  : 'Starting Quantity'}{' '}
                 <span className="text-rose-500">*</span>
               </label>
               <input
                 type="number"
                 required
-                min={1}
+                min={isEditMode ? Math.max(issuedCopies, 1) : 1}
                 placeholder="5"
                 value={totalQuantity}
                 onChange={(e) => setTotalQuantity(e.target.value ? Number(e.target.value) : '')}
@@ -294,16 +346,16 @@ export const AddBookModal: React.FC<AddBookModalProps> = ({ isOpen, onClose }) =
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block font-semibold text-slate-700 mb-1">
-                Unique Tracking Code / ISBN {existingBook ? '' : '(Auto-generated if empty)'}
+                Unique Tracking Code / ISBN {isEditMode || existingBook ? '' : '(Auto-generated if empty)'}
               </label>
               <input
                 type="text"
                 placeholder="e.g. ISBN-978-969-586-001-2"
                 value={isbn}
                 onChange={(e) => setIsbn(e.target.value)}
-                readOnly={!!existingBook}
+                readOnly={!isEditMode && !!existingBook}
                 className={`w-full p-2.5 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-600 font-mono ${
-                  existingBook ? 'bg-slate-100 cursor-not-allowed' : 'bg-slate-50 focus:bg-white'
+                  !isEditMode && existingBook ? 'bg-slate-100 cursor-not-allowed' : 'bg-slate-50 focus:bg-white'
                 }`}
               />
             </div>
@@ -322,10 +374,9 @@ export const AddBookModal: React.FC<AddBookModalProps> = ({ isOpen, onClose }) =
           {/* Category & Language */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Category</label>
+              <label className="block font-semibold text-slate-700 mb-1">Category (Optional)</label>
               <input
                 type="text"
-                required
                 placeholder="e.g. Hadith Studies"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
@@ -333,10 +384,9 @@ export const AddBookModal: React.FC<AddBookModalProps> = ({ isOpen, onClose }) =
               />
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Language</label>
+              <label className="block font-semibold text-slate-700 mb-1">Language (Optional)</label>
               <input
                 type="text"
-                required
                 placeholder="e.g. Urdu"
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
@@ -357,30 +407,30 @@ export const AddBookModal: React.FC<AddBookModalProps> = ({ isOpen, onClose }) =
             />
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100">
-            <button
-              type="button"
-              id="cancel-add-book-btn"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                handleClose();
-              }}
-              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl cursor-pointer transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              id="submit-add-book-btn"
-              type="submit"
-              className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl shadow-md"
-            >
-              {existingBook ? 'Add Stock' : 'Save Book Record'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </ModalBody>
+
+        <ModalFooter>
+          <button
+            type="button"
+            id="cancel-add-book-btn"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleClose();
+            }}
+            className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl cursor-pointer transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            id={isEditMode ? 'submit-edit-book-btn' : 'submit-add-book-btn'}
+            type="submit"
+            className="w-full sm:w-auto px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl shadow-md"
+          >
+            {isEditMode ? 'Save Changes' : existingBook ? 'Add Stock' : 'Save Book'}
+          </button>
+        </ModalFooter>
+      </form>
+    </Modal>
   );
 };

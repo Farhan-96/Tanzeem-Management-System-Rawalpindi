@@ -10,6 +10,7 @@
     "build": "npm install --prefix frontend && npm run build --prefix frontend",
     "start": "npm start --prefix backend",
     "seed": "npm run seed --prefix backend",
+    "import:books": "npm run import:books --prefix backend",
     "lint": "npm run lint --prefix frontend && npm run lint --prefix backend"
   }
 }

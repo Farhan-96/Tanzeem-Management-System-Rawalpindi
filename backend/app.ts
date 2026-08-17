@@ -1,7 +1,10 @@
 import 'dotenv/config';
 import express from 'express';
-import { MongoClient, Db } from 'mongodb';
+import { MongoClient, Db, GridFSBucket, ObjectId } from 'mongodb';
 import crypto from 'crypto';
+import multer from 'multer';
+import { PDFParse } from 'pdf-parse';
+import { parseInvoiceText } from './invoiceParse.ts';
 
 const URI = process.env.MONGODB_URI || '';
 const DB_NAME = 'tanzeem';
@@ -27,12 +30,58 @@ interface WithId {
 
 let db: Db | null = null;
 let mongoClient: MongoClient | null = null;
+let filesBucket: GridFSBucket | null = null;
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024,
+  },
+});
+
+const ALLOWED_FILE_TYPES = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+]);
+
+function getFilesBucket() {
+  if (!db) {
+    throw new Error('Database is not initialized');
+  }
+  if (!filesBucket) {
+    filesBucket = new GridFSBucket(db, {
+      bucketName: 'attachments',
+    });
+  }
+  return filesBucket;
+}
+
+function gridFsMimeType(file: { metadata?: Record<string, unknown> }) {
+  const contentType = file.metadata?.contentType;
+  return typeof contentType === 'string' && contentType
+    ? contentType
+    : 'application/octet-stream';
+}
+
+async function extractPdfText(buffer: Buffer) {
+  const parser = new PDFParse({ data: buffer });
+  try {
+    const result = await parser.getText();
+    return result.text || '';
+  } finally {
+    await parser.destroy();
+  }
+}
 
 const COLLECTIONS = {
   users: 'users',
   books: 'books',
   borrowRecords: 'borrowRecords',
   saleRecords: 'saleRecords',
+  bookArrivals: 'bookArrivals',
   officeAssets: 'officeAssets',
   activityLogs: 'activityLogs',
 } as const;
@@ -70,6 +119,11 @@ export async function initializeDatabase(): Promise<Db> {
   );
 
   await db.collection(COLLECTIONS.saleRecords).createIndex(
+    { id: 1 },
+    { unique: true }
+  );
+
+  await db.collection(COLLECTIONS.bookArrivals).createIndex(
     { id: 1 },
     { unique: true }
   );
@@ -364,12 +418,14 @@ app.get('/api/data', async (_req, res) => {
       books,
       borrowRecords,
       saleRecords,
+      bookArrivals,
       officeAssets,
       activityLogs,
     ] = await Promise.all([
       listCollection(COLLECTIONS.books),
       listCollection(COLLECTIONS.borrowRecords),
       listCollection(COLLECTIONS.saleRecords),
+      listCollection(COLLECTIONS.bookArrivals),
       listCollection(COLLECTIONS.officeAssets),
       listCollection(COLLECTIONS.activityLogs),
     ]);
@@ -385,6 +441,7 @@ app.get('/api/data', async (_req, res) => {
       books,
       borrowRecords,
       saleRecords,
+      arrivals: bookArrivals,
       assets: officeAssets,
       logs: activityLogs,
     });
@@ -423,12 +480,19 @@ app.post('/api/data/reset', async (_req, res) => {
         .deleteMany({}),
 
       db
+        .collection(COLLECTIONS.bookArrivals)
+        .deleteMany({}),
+
+      db
         .collection(COLLECTIONS.officeAssets)
         .deleteMany({}),
 
       db
         .collection(COLLECTIONS.activityLogs)
         .deleteMany({}),
+
+      db.collection('attachments.files').deleteMany({}),
+      db.collection('attachments.chunks').deleteMany({}),
     ]);
 
     res.json({
@@ -728,6 +792,12 @@ registerCrud(
 
 registerCrud(
   app,
+  'book-arrivals',
+  COLLECTIONS.bookArrivals
+);
+
+registerCrud(
+  app,
   'office-assets',
   COLLECTIONS.officeAssets
 );
@@ -777,6 +847,151 @@ app.post(
     }
   }
 );
+
+app.post(
+  '/api/files',
+  upload.single('file'),
+  async (req, res) => {
+    try {
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({
+          message: 'No file uploaded.',
+        });
+      }
+
+      if (!ALLOWED_FILE_TYPES.has(file.mimetype)) {
+        return res.status(400).json({
+          message: 'Only PDF and image files are allowed.',
+        });
+      }
+
+      const bucket = getFilesBucket();
+      const kind = String(req.body?.kind || 'other');
+      const uploadedBy = String(req.body?.uploadedBy || '');
+
+      await new Promise<void>((resolve, reject) => {
+        const stream = bucket.openUploadStream(file.originalname, {
+          metadata: {
+            kind,
+            uploadedBy,
+            contentType: file.mimetype,
+          },
+        });
+        stream.on('error', reject);
+        stream.on('finish', () => {
+          res.status(201).json({
+            id: stream.id.toString(),
+            fileName: file.originalname,
+            mimeType: file.mimetype,
+            size: file.size,
+            uploadedAt: new Date().toISOString().split('T')[0],
+            uploadedBy,
+            kind,
+          });
+          resolve();
+        });
+        stream.end(file.buffer);
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({
+        message: 'Failed to upload file',
+      });
+    }
+  }
+);
+
+app.get('/api/files/:id', async (req, res) => {
+  try {
+    if (!ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        message: 'Invalid file id',
+      });
+    }
+
+    const bucket = getFilesBucket();
+    const _id = new ObjectId(req.params.id);
+    const docs = await bucket.find({ _id }).toArray();
+    const file = docs[0];
+
+    if (!file) {
+      return res.status(404).json({
+        message: 'File not found',
+      });
+    }
+
+    res.setHeader('Content-Type', gridFsMimeType(file));
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="${encodeURIComponent(file.filename)}"`
+    );
+    bucket.openDownloadStream(_id).pipe(res);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      message: 'Failed to download file',
+    });
+  }
+});
+
+app.post('/api/files/:id/parse-invoice', async (req, res) => {
+  try {
+    if (!ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        message: 'Invalid file id',
+      });
+    }
+
+    const bucket = getFilesBucket();
+    const _id = new ObjectId(req.params.id);
+    const docs = await bucket.find({ _id }).toArray();
+    const file = docs[0];
+
+    if (!file) {
+      return res.status(404).json({
+        message: 'File not found',
+      });
+    }
+
+    const chunks: Buffer[] = [];
+    await new Promise<void>((resolve, reject) => {
+      const stream = bucket.openDownloadStream(_id);
+      stream.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+      stream.on('error', reject);
+      stream.on('end', () => resolve());
+    });
+    const buffer = Buffer.concat(chunks);
+
+    if (gridFsMimeType(file) !== 'application/pdf') {
+      return res.json({
+        textPreview: '',
+        items: [],
+        note: 'Image stored. Fill arrival details manually — text can only be read from PDF invoices.',
+      });
+    }
+
+    const parsedText = await extractPdfText(buffer);
+    const catalog = ((await listCollection(COLLECTIONS.books)) as Array<{
+      id: string;
+      title: string;
+      isbn?: string;
+      price?: number;
+    }>).map((book) => ({
+      id: String(book.id),
+      title: String(book.title || ''),
+      isbn: String(book.isbn || ''),
+      price: Number(book.price) || 0,
+    }));
+
+    res.json(parseInvoiceText(parsedText, catalog));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      message: 'Failed to read invoice PDF. The file is still saved.',
+    });
+  }
+});
 
 /**
  * Export Express app for Vercel.

@@ -12,11 +12,13 @@ import { DashboardView } from './components/DashboardView';
 import { BookCatalogView } from './components/BookCatalogView';
 import { BookLendingView } from './components/BookLendingView';
 import { BookSalesView } from './components/BookSalesView';
+import { BookArrivalsView } from './components/BookArrivalsView';
 import { PendingPaymentsView } from './components/PendingPaymentsView';
 import { OfficeAssetsView } from './components/OfficeAssetsView';
 import { ActivityLogsView } from './components/ActivityLogsView';
 
 import { AddBookModal } from './components/modals/AddBookModal';
+import { RecordArrivalModal } from './components/modals/RecordArrivalModal';
 import { BorrowBookModal } from './components/modals/BorrowBookModal';
 import { SellBookModal } from './components/modals/SellBookModal';
 import { CollectPaymentModal } from './components/modals/CollectPaymentModal';
@@ -30,15 +32,28 @@ function MainAppContent() {
   // All hooks must run unconditionally (before any early return)
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [addBookModalOpen, setAddBookModalOpen] = useState(false);
+  const [recordArrivalModalOpen, setRecordArrivalModalOpen] = useState(false);
   const [borrowModalOpen, setBorrowModalOpen] = useState(false);
   const [sellModalOpen, setSellModalOpen] = useState(false);
   const [addAssetModalOpen, setAddAssetModalOpen] = useState(false);
   const [collectPaymentModalOpen, setCollectPaymentModalOpen] = useState(false);
   const [printInvoiceModalOpen, setPrintInvoiceModalOpen] = useState(false);
   const [preselectedBook, setPreselectedBook] = useState<Book | null>(null);
+  const [bookToEdit, setBookToEdit] = useState<Book | null>(null);
   const [selectedSaleRecord, setSelectedSaleRecord] = useState<BookSaleRecord | null>(null);
+  const [saleToEdit, setSaleToEdit] = useState<BookSaleRecord | null>(null);
 
-  const openAddBookModal = () => setAddBookModalOpen(true);
+  const openAddBookModal = () => {
+    setBookToEdit(null);
+    setAddBookModalOpen(true);
+  };
+
+  const openRecordArrivalModal = () => setRecordArrivalModalOpen(true);
+
+  const openEditBookModal = (book: Book) => {
+    setBookToEdit(book);
+    setAddBookModalOpen(true);
+  };
 
   const openBorrowModal = (book?: Book) => {
     setPreselectedBook(book || null);
@@ -46,7 +61,14 @@ function MainAppContent() {
   };
 
   const openSellBookModal = (book?: Book) => {
+    setSaleToEdit(null);
     setPreselectedBook(book || null);
+    setSellModalOpen(true);
+  };
+
+  const openEditSaleModal = (sale: BookSaleRecord) => {
+    setPreselectedBook(null);
+    setSaleToEdit(sale);
     setSellModalOpen(true);
   };
 
@@ -83,6 +105,7 @@ function MainAppContent() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         openAddBookModal={openAddBookModal}
+        openRecordArrivalModal={openRecordArrivalModal}
         openSellBookModal={openSellBookModal}
         openBorrowModal={openBorrowModal}
         openAddAssetModal={openAddAssetModal}
@@ -100,6 +123,7 @@ function MainAppContent() {
           <DashboardView
             setActiveTab={setActiveTab}
             openAddBookModal={openAddBookModal}
+            openRecordArrivalModal={openRecordArrivalModal}
             openSellBookModal={openSellBookModal}
             openBorrowModal={openBorrowModal}
             openAddAssetModal={openAddAssetModal}
@@ -111,6 +135,7 @@ function MainAppContent() {
         {activeTab === 'books' && (
           <BookCatalogView
             openAddBookModal={openAddBookModal}
+            openEditBookModal={openEditBookModal}
             openSellBookModal={openSellBookModal}
             openBorrowModal={openBorrowModal}
           />
@@ -121,15 +146,21 @@ function MainAppContent() {
         {activeTab === 'sales' && (
           <BookSalesView
             openSellBookModal={openSellBookModal}
+            openEditSaleModal={openEditSaleModal}
             openCollectPaymentModal={openCollectPaymentModal}
             openPrintInvoiceModal={openPrintInvoiceModal}
           />
+        )}
+
+        {activeTab === 'arrivals' && (
+          <BookArrivalsView openRecordArrivalModal={openRecordArrivalModal} />
         )}
 
         {activeTab === 'pending-dues' && (
           <PendingPaymentsView
             openCollectPaymentModal={openCollectPaymentModal}
             openPrintInvoiceModal={openPrintInvoiceModal}
+            openEditSaleModal={openEditSaleModal}
           />
         )}
 
@@ -149,7 +180,19 @@ function MainAppContent() {
         </div>
       </footer>
 
-      <AddBookModal isOpen={addBookModalOpen} onClose={() => setAddBookModalOpen(false)} />
+      <AddBookModal
+        isOpen={addBookModalOpen}
+        onClose={() => {
+          setAddBookModalOpen(false);
+          setBookToEdit(null);
+        }}
+        bookToEdit={bookToEdit}
+      />
+
+      <RecordArrivalModal
+        isOpen={recordArrivalModalOpen}
+        onClose={() => setRecordArrivalModalOpen(false)}
+      />
 
       <BorrowBookModal
         isOpen={borrowModalOpen}
@@ -159,8 +202,13 @@ function MainAppContent() {
 
       <SellBookModal
         isOpen={sellModalOpen}
-        onClose={() => setSellModalOpen(false)}
+        onClose={() => {
+          setSellModalOpen(false);
+          setSaleToEdit(null);
+          setPreselectedBook(null);
+        }}
         preselectedBook={preselectedBook}
+        saleToEdit={saleToEdit}
         openPrintInvoiceModal={openPrintInvoiceModal}
       />
 

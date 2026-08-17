@@ -56,6 +56,19 @@ export interface PaymentTransaction {
   date: string;
   receivedBy: string;
   notes?: string;
+  attachments?: StoredAttachment[];
+}
+
+export type AttachmentKind = 'invoice' | 'payment-proof' | 'asset-document' | 'other';
+
+export interface StoredAttachment {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  uploadedAt: string;
+  uploadedBy?: string;
+  kind: AttachmentKind;
 }
 
 export interface BookSaleRecord {
@@ -76,6 +89,30 @@ export interface BookSaleRecord {
   remarks?: string;
   soldBy: string;
   paymentHistory: PaymentTransaction[];
+  attachments?: StoredAttachment[];
+}
+
+export type ArrivalPaymentStatus = 'Paid' | 'Unpaid' | 'Partial';
+
+export interface BookArrivalRecord {
+  id: string;
+  bookId: string;
+  bookTitle: string;
+  bookIsbn: string;
+  quantity: number;
+  unitCost: number;
+  totalCost: number;
+  paidAmount: number;
+  remainingAmount: number;
+  paymentStatus: ArrivalPaymentStatus;
+  arrivalDate: string;
+  broughtBy: string;
+  remarks?: string;
+  recordedBy: string;
+  recordedAt: string;
+  paymentHistory: PaymentTransaction[];
+  attachments?: StoredAttachment[];
+  invoiceNo?: string;
 }
 
 export type AssetStatus = 'Working' | 'Damaged' | 'Under Repair' | 'Disposed';
@@ -96,6 +133,7 @@ export interface OfficeAsset {
   serialNumber?: string;
   remarks?: string;
   lastInspectedDate?: string;
+  attachments?: StoredAttachment[];
 }
 
 export interface ActivityLog {
@@ -105,5 +143,5 @@ export interface ActivityLog {
   userRole: UserRole;
   action: string;
   details: string;
-  module: 'Books' | 'Lending' | 'Sales' | 'Assets' | 'Auth';
+  module: 'Books' | 'Lending' | 'Sales' | 'Assets' | 'Auth' | 'Arrivals';
 }

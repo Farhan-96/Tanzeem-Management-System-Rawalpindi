@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+.overflow-y-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
 @media print {
   body * {
     visibility: hidden !important;

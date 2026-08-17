@@ -13,14 +13,17 @@ import {
   ChevronDown,
   RefreshCw,
   LogOut,
+  PackagePlus,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { UserRole } from '../types';
+import { Modal, ModalHeader, ModalBody, ModalFooter } from './modals/Modal';
 
 interface HeaderProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   openAddBookModal: () => void;
+  openRecordArrivalModal: () => void;
   openSellBookModal: () => void;
   openBorrowModal: () => void;
   openAddAssetModal: () => void;
@@ -30,11 +33,12 @@ export const Header: React.FC<HeaderProps> = ({
   activeTab,
   setActiveTab,
   openAddBookModal,
+  openRecordArrivalModal,
   openSellBookModal,
   openBorrowModal,
   openAddAssetModal,
 }) => {
-  const { currentUser, availableUsers, switchUserRole, books, borrowRecords, saleRecords, assets, resetAllData, logout } =
+  const { currentUser, availableUsers, switchUserRole, books, borrowRecords, saleRecords, arrivalRecords, assets, resetAllData, logout } =
     useApp();
   const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
@@ -46,6 +50,7 @@ export const Header: React.FC<HeaderProps> = ({
   const activeBorrowsCount = borrowRecords.filter((r) => r.status === 'Active' || r.status === 'Overdue').length;
   const overdueBorrowsCount = borrowRecords.filter((r) => r.status === 'Overdue').length;
   const pendingPaymentsCount = saleRecords.filter((s) => s.paymentStatus === 'Payment Remaining').length;
+  const unpaidArrivalsCount = arrivalRecords.filter((r) => r.paymentStatus !== 'Paid').length;
   const totalPendingAmount = saleRecords
     .filter((s) => s.paymentStatus === 'Payment Remaining')
     .reduce((sum, s) => sum + s.remainingAmount, 0);
@@ -59,15 +64,22 @@ export const Header: React.FC<HeaderProps> = ({
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'books', label: 'Books Catalog', icon: BookOpen, badge: totalBooks },
+    { id: 'books', label: 'Book Catalog', icon: BookOpen, badge: totalBooks },
     {
       id: 'lending',
-      label: 'Lending & Returns',
+      label: 'Issued Books',
       icon: RotateCcw,
       badge: activeBorrowsCount,
       alert: overdueBorrowsCount > 0,
     },
     { id: 'sales', label: 'Book Sales', icon: Receipt, badge: saleRecords.length },
+    {
+      id: 'arrivals',
+      label: 'Book Arrivals',
+      icon: PackagePlus,
+      badge: arrivalRecords.length,
+      highlight: unpaidArrivalsCount > 0,
+    },
     {
       id: 'pending-dues',
       label: 'Pending Dues',
@@ -76,7 +88,7 @@ export const Header: React.FC<HeaderProps> = ({
       highlight: pendingPaymentsCount > 0,
     },
     { id: 'assets', label: 'Office Assets', icon: Building2, badge: assets.length, alert: damagedAssetsCount > 0 },
-    { id: 'logs', label: 'Audit Logs', icon: FileText },
+    { id: 'logs', label: 'Activity Log', icon: FileText },
   ];
 
   return (
@@ -257,6 +269,14 @@ export const Header: React.FC<HeaderProps> = ({
               <span>+ Add Book</span>
             </button>
             <button
+              id="header-record-arrival-btn"
+              onClick={openRecordArrivalModal}
+              className="bg-emerald-900/90 hover:bg-emerald-800 text-emerald-100 border border-emerald-700 px-3 py-1.5 rounded-lg flex items-center space-x-1.5 font-medium transition-colors"
+            >
+              <PackagePlus className="w-3.5 h-3.5 text-amber-400" />
+              <span>+ Record Arrival</span>
+            </button>
+            <button
               id="header-sell-book-btn"
               onClick={openSellBookModal}
               className="bg-amber-500 hover:bg-amber-400 text-emerald-950 font-bold px-3 py-1.5 rounded-lg shadow-sm border border-amber-300 flex items-center space-x-1.5 transition-colors"
@@ -270,7 +290,7 @@ export const Header: React.FC<HeaderProps> = ({
               className="bg-emerald-900/90 hover:bg-emerald-800 text-emerald-100 border border-emerald-700 px-3 py-1.5 rounded-lg flex items-center space-x-1.5 font-medium transition-colors"
             >
               <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
-              <span>+ Issue Loan</span>
+              <span>+ Lend Book</span>
             </button>
             <button
               id="header-add-asset-btn"
@@ -286,37 +306,39 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Reset Confirmation Modal */}
       {resetConfirmOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 text-slate-800">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200">
-            <div className="flex items-center space-x-3 text-amber-600 mb-3">
-              <AlertCircle className="w-6 h-6" />
-              <h3 className="text-lg font-bold">Reset Demo Data</h3>
+        <Modal isOpen onClose={() => setResetConfirmOpen(false)} maxWidth="max-w-md">
+          <ModalHeader onClose={() => setResetConfirmOpen(false)}>
+            <div className="flex items-center space-x-3 text-amber-600">
+              <AlertCircle className="w-6 h-6 shrink-0" />
+              <h3 className="text-base sm:text-lg font-bold">Reset Demo Data</h3>
             </div>
-            <p className="text-sm text-slate-600 mb-6">
+          </ModalHeader>
+          <ModalBody>
+            <p className="text-sm text-slate-600">
               Are you sure you want to restore the default sample books, sales, borrowings, and office assets? Any
               custom additions will be reset.
             </p>
-            <div className="flex justify-end space-x-3">
-              <button
-                id="cancel-reset-btn"
-                onClick={() => setResetConfirmOpen(false)}
-                className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg"
-              >
-                Cancel
-              </button>
-              <button
-                id="confirm-reset-btn"
-                onClick={() => {
-                  resetAllData();
-                  setResetConfirmOpen(false);
-                }}
-                className="px-4 py-2 text-sm font-medium text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg"
-              >
-                Confirm Reset
-              </button>
-            </div>
-          </div>
-        </div>
+          </ModalBody>
+          <ModalFooter>
+            <button
+              id="cancel-reset-btn"
+              onClick={() => setResetConfirmOpen(false)}
+              className="w-full sm:w-auto px-4 py-2.5 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg"
+            >
+              Cancel
+            </button>
+            <button
+              id="confirm-reset-btn"
+              onClick={() => {
+                resetAllData();
+                setResetConfirmOpen(false);
+              }}
+              className="w-full sm:w-auto px-4 py-2.5 text-sm font-medium text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg"
+            >
+              Confirm Reset
+            </button>
+          </ModalFooter>
+        </Modal>
       )}
     </header>
   );

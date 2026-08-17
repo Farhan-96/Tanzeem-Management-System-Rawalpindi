@@ -24,6 +24,7 @@ export interface AppDataPayload {
   books: unknown[];
   borrowRecords: unknown[];
   saleRecords: unknown[];
+  arrivals: unknown[];
   assets: unknown[];
   logs: unknown[];
 }
@@ -49,6 +50,14 @@ export const api = {
     request('/api/sale-records', { method: 'POST', body: JSON.stringify(record) }),
   updateSale: (record: { id: string }) =>
     request(`/api/sale-records/${record.id}`, { method: 'PUT', body: JSON.stringify(record) }),
+  deleteSale: (id: string) => request(`/api/sale-records/${id}`, { method: 'DELETE' }),
+
+  saveArrival: (record: unknown) =>
+    request('/api/book-arrivals', { method: 'POST', body: JSON.stringify(record) }),
+  updateArrival: (record: { id: string }) =>
+    request(`/api/book-arrivals/${record.id}`, { method: 'PUT', body: JSON.stringify(record) }),
+  deleteArrival: (id: string) =>
+    request(`/api/book-arrivals/${id}`, { method: 'DELETE' }),
 
   saveAsset: (asset: unknown) =>
     request('/api/office-assets', { method: 'POST', body: JSON.stringify(asset) }),
@@ -58,4 +67,53 @@ export const api = {
 
   saveLog: (log: unknown) =>
     request('/api/activity-logs', { method: 'POST', body: JSON.stringify(log) }),
+
+  uploadFile: async (file: File, kind: string, uploadedBy?: string) => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('kind', kind);
+    if (uploadedBy) form.append('uploadedBy', uploadedBy);
+    const res = await fetch(apiUrl('/api/files'), {
+      method: 'POST',
+      body: form,
+    });
+    if (!res.ok) {
+      let message = `Upload failed (${res.status})`;
+      try {
+        const body = await res.json();
+        if (body?.message) message = body.message;
+      } catch {
+        // ignore
+      }
+      throw new Error(message);
+    }
+    return res.json() as Promise<{
+      id: string;
+      fileName: string;
+      mimeType: string;
+      size: number;
+      uploadedAt: string;
+      uploadedBy?: string;
+      kind: string;
+    }>;
+  },
+
+  parseInvoice: (fileId: string) =>
+    request<{
+      textPreview: string;
+      arrivalDate?: string;
+      paymentStatus?: 'Paid' | 'Unpaid' | 'Partial';
+      invoiceNo?: string;
+      items: Array<{
+        bookId: string;
+        bookTitle: string;
+        bookIsbn: string;
+        quantity: number;
+        unitCost: number;
+        confidence: 'high' | 'medium';
+      }>;
+      note?: string;
+    }>(`/api/files/${fileId}/parse-invoice`, { method: 'POST' }),
+
+  fileUrl: (id: string) => apiUrl(`/api/files/${id}`),
 };

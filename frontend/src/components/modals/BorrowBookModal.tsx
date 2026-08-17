@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { RotateCcw, X, BookOpen, User, Phone, Calendar, Building, AlertCircle } from 'lucide-react';
+import { RotateCcw, BookOpen, AlertCircle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Book } from '../../types';
+import { Modal, ModalHeader, ModalBody, ModalFooter } from './Modal';
+import { BookNameSearch } from '../BookNameSearch';
 
 interface BorrowBookModalProps {
   isOpen: boolean;
@@ -10,7 +12,7 @@ interface BorrowBookModalProps {
 }
 
 export const BorrowBookModal: React.FC<BorrowBookModalProps> = ({ isOpen, onClose, preselectedBook }) => {
-  const { books, issueBookBorrow } = useApp();
+  const { books, borrowRecords, issueBookBorrow } = useApp();
 
   const [selectedBookId, setSelectedBookId] = useState('');
   const [borrowerName, setBorrowerName] = useState('');
@@ -20,6 +22,7 @@ export const BorrowBookModal: React.FC<BorrowBookModalProps> = ({ isOpen, onClos
   const [expectedReturnDate, setExpectedReturnDate] = useState('');
   const [remarks, setRemarks] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [showPersonSuggestions, setShowPersonSuggestions] = useState(false);
 
   const handleClose = () => {
     setBorrowerName('');
@@ -27,20 +30,10 @@ export const BorrowBookModal: React.FC<BorrowBookModalProps> = ({ isOpen, onClos
     setBorrowerEmail('');
     setRemarks('');
     setErrorMessage('');
+    setShowPersonSuggestions(false);
     onClose();
   };
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        handleClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen]);
-
-  // Calculate default 14-day expected return date
   useEffect(() => {
     const futureDate = new Date();
     futureDate.setDate(futureDate.getDate() + 14);
@@ -59,6 +52,27 @@ export const BorrowBookModal: React.FC<BorrowBookModalProps> = ({ isOpen, onClos
   if (!isOpen) return null;
 
   const availableBooks = books.filter((b) => b.availableQuantity > 0);
+  const pastPeople = Array.from(
+    new Map(
+      borrowRecords.map((record) => [
+        record.borrowerName.trim().toLowerCase(),
+        {
+          name: record.borrowerName,
+          phone: record.borrowerPhone,
+          dept: record.borrowerDept,
+        },
+      ])
+    ).values()
+  );
+  const personQuery = borrowerName.trim().toLowerCase();
+  const matchedPeople = pastPeople.filter((person) => {
+    if (!personQuery) return true;
+    return (
+      person.name.toLowerCase().includes(personQuery) ||
+      person.phone.includes(personQuery) ||
+      person.dept.toLowerCase().includes(personQuery)
+    );
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,109 +102,101 @@ export const BorrowBookModal: React.FC<BorrowBookModalProps> = ({ isOpen, onClos
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          handleClose();
-        }
-      }}
-    >
-      <div
-        className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 my-8"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-          <div className="flex items-center space-x-2">
-            <RotateCcw className="w-5 h-5 text-emerald-700" />
-            <h3 className="text-lg font-bold text-slate-900 font-serif">Issue Book Borrow (Purpose 1)</h3>
-          </div>
-          <button
-            type="button"
-            id="close-borrow-modal-btn"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              handleClose();
-            }}
-            className="text-slate-400 hover:text-slate-600 font-bold p-1 cursor-pointer transition-colors rounded-lg hover:bg-slate-100"
-            aria-label="Close modal"
-          >
-            <X className="w-5 h-5 pointer-events-none" />
-          </button>
+    <Modal isOpen={isOpen} onClose={handleClose} maxWidth="max-w-lg">
+      <ModalHeader onClose={handleClose} closeId="close-borrow-modal-btn">
+        <div className="flex items-center space-x-2 min-w-0">
+          <RotateCcw className="w-5 h-5 text-emerald-700 shrink-0" />
+          <h3 className="text-base sm:text-lg font-bold text-slate-900 font-serif">Lend a Book</h3>
         </div>
+      </ModalHeader>
 
-        {errorMessage && (
-          <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center space-x-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{errorMessage}</span>
-          </div>
-        )}
+      {errorMessage && (
+        <div className="mx-4 sm:mx-6 mt-4 p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center space-x-2 shrink-0">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{errorMessage}</span>
+        </div>
+      )}
 
-        {books.length === 0 ? (
-          <div className="p-6 text-center space-y-3">
+      {books.length === 0 ? (
+        <ModalBody>
+          <div className="text-center space-y-3 py-4">
             <BookOpen className="w-10 h-10 text-slate-300 mx-auto" />
-            <p className="text-sm font-semibold text-slate-800">No books available to borrow</p>
-            <p className="text-xs text-slate-500">Add books to the catalog first, then issue a loan.</p>
-            <button
-              type="button"
-              onClick={handleClose}
-              className="px-4 py-2 bg-emerald-700 text-white text-xs font-bold rounded-xl hover:bg-emerald-800"
-            >
-              Close
-            </button>
+            <p className="text-sm font-semibold text-slate-800">No books available to lend</p>
+            <p className="text-xs text-slate-500">Add books to the catalog first, then lend a copy.</p>
           </div>
-        ) : availableBooks.length === 0 ? (
-          <div className="p-6 text-center space-y-3">
+        </ModalBody>
+      ) : availableBooks.length === 0 ? (
+        <ModalBody>
+          <div className="text-center space-y-3 py-4">
             <AlertCircle className="w-10 h-10 text-amber-500 mx-auto" />
             <p className="text-sm font-semibold text-slate-800">No copies currently available</p>
             <p className="text-xs text-slate-500">All books are checked out. Wait for a return or add more stock.</p>
-            <button
-              type="button"
-              onClick={handleClose}
-              className="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-200"
-            >
-              Close
-            </button>
           </div>
-        ) : (
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+        </ModalBody>
+      ) : (
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 text-xs">
+          <ModalBody className="space-y-4">
           {/* Select Book */}
           <div>
             <label className="block font-semibold text-slate-700 mb-1">
-              Select Book to Borrow <span className="text-rose-500">*</span>
+              Select Book <span className="text-rose-500">*</span>
             </label>
-            <select
-              id="borrow-book-select"
-              required
-              value={selectedBookId}
-              onChange={(e) => setSelectedBookId(e.target.value)}
-              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600 cursor-pointer"
-            >
-              <option value="">-- Choose Book from Available Stock --</option>
-              {availableBooks.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.title} (By {b.author}) &bull; Available: {b.availableQuantity} copies
-                </option>
-              ))}
-            </select>
+            <BookNameSearch
+              books={availableBooks}
+              selectedBookId={selectedBookId}
+              getStock={(book) => book.availableQuantity}
+              placeholder="Type book name to search..."
+              onSelect={(book) => setSelectedBookId(book.id)}
+            />
           </div>
 
           {/* Borrower Name & Phone */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
+            <div className="relative">
               <label className="block font-semibold text-slate-700 mb-1">
-                Borrower Person Name <span className="text-rose-500">*</span>
+                Person Name <span className="text-rose-500">*</span>
               </label>
               <input
                 id="borrower-name-input"
                 type="text"
                 required
-                placeholder="e.g. Usman Ghani"
+                autoComplete="off"
+                placeholder="Type to search or enter a name"
                 value={borrowerName}
-                onChange={(e) => setBorrowerName(e.target.value)}
+                onFocus={() => setShowPersonSuggestions(true)}
+                onChange={(e) => {
+                  setBorrowerName(e.target.value);
+                  setShowPersonSuggestions(true);
+                }}
+                onBlur={() => {
+                  window.setTimeout(() => setShowPersonSuggestions(false), 150);
+                }}
                 className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
               />
+              {showPersonSuggestions && matchedPeople.length > 0 && (
+                <div className="absolute left-0 right-0 top-full mt-1 z-30 max-h-44 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+                  {matchedPeople.slice(0, 12).map((person) => (
+                    <button
+                      key={`${person.name}-${person.phone}`}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setBorrowerName(person.name);
+                        setBorrowerPhone(person.phone);
+                        if (person.dept) setBorrowerDept(person.dept);
+                        setShowPersonSuggestions(false);
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-emerald-50 border-b border-slate-100 last:border-b-0"
+                    >
+                      <div className="font-semibold text-slate-800">{person.name}</div>
+                      <div className="text-[11px] text-slate-500">
+                        {person.dept}
+                        {person.phone ? ` · ${person.phone}` : ''}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">
@@ -211,7 +217,7 @@ export const BorrowBookModal: React.FC<BorrowBookModalProps> = ({ isOpen, onClos
           {/* Department / Unit & Expected Return Date */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Borrower Department / Wing</label>
+              <label className="block font-semibold text-slate-700 mb-1">Department / Unit</label>
               <input
                 type="text"
                 placeholder="e.g. Research Wing, Youth Section"
@@ -247,8 +253,9 @@ export const BorrowBookModal: React.FC<BorrowBookModalProps> = ({ isOpen, onClos
             />
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100">
+          </ModalBody>
+
+          <ModalFooter>
             <button
               type="button"
               id="cancel-borrow-modal-btn"
@@ -257,21 +264,32 @@ export const BorrowBookModal: React.FC<BorrowBookModalProps> = ({ isOpen, onClos
                 e.stopPropagation();
                 handleClose();
               }}
-              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl cursor-pointer transition-colors"
+              className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl cursor-pointer transition-colors"
             >
               Cancel
             </button>
             <button
               id="submit-issue-borrow-btn"
               type="submit"
-              className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl shadow-md"
+              className="w-full sm:w-auto px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl shadow-md"
             >
-              Issue Book & Deduct Stock
+              Lend Book
             </button>
-          </div>
+          </ModalFooter>
         </form>
-        )}
-      </div>
-    </div>
+      )}
+
+      {(books.length === 0 || availableBooks.length === 0) && (
+        <ModalFooter>
+          <button
+            type="button"
+            onClick={handleClose}
+            className="w-full sm:w-auto px-4 py-2.5 bg-emerald-700 text-white text-xs font-bold rounded-xl hover:bg-emerald-800"
+          >
+            Close
+          </button>
+        </ModalFooter>
+      )}
+    </Modal>
   );
 };

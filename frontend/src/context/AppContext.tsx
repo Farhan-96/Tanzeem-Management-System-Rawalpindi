@@ -5,13 +5,17 @@ import {
   Book,
   BookBorrowRecord,
   BookSaleRecord,
+  BookArrivalRecord,
+  ArrivalPaymentStatus,
   OfficeAsset,
   ActivityLog,
   AssetStatus,
   SaleItem,
+  StoredAttachment,
 } from '../types';
 import { api } from '../api/client';
 import { apiUrl } from '../api/baseUrl';
+import type { BookImportRow } from '../utils/parseBookSpreadsheet';
 
 const AUTH_SESSION_KEY = 'tanzeem_auth_session';
 
@@ -37,6 +41,7 @@ interface AppContextType {
   addBook: (newBook: Omit<Book, 'id' | 'availableQuantity' | 'addedDate'>) => void;
   updateBook: (updatedBook: Book) => void;
   deleteBook: (bookId: string) => void;
+  importBooks: (rows: BookImportRow[]) => { success: boolean; created: number; updated: number; skipped: number; message: string };
 
   borrowRecords: BookBorrowRecord[];
   issueBookBorrow: (data: {
@@ -60,8 +65,37 @@ interface AppContextType {
     initialPayment: number;
     paymentDueDate?: string;
     remarks?: string;
+    paymentAttachments?: StoredAttachment[];
   }) => { success: boolean; invoiceNo?: string; message: string; saleRecord?: BookSaleRecord };
-  collectPayment: (saleId: string, amount: number, notes?: string) => void;
+  updateBookSale: (
+    saleId: string,
+    data: {
+      customerName: string;
+      customerPhone?: string;
+      unitName: string;
+      items: Array<{ bookId: string; quantity: number; unitPrice?: number }>;
+      discount: number;
+      paymentDueDate?: string;
+      remarks?: string;
+    }
+  ) => { success: boolean; message: string; saleRecord?: BookSaleRecord };
+  deleteBookSale: (saleId: string) => { success: boolean; message: string };
+  collectPayment: (saleId: string, amount: number, notes?: string, attachments?: StoredAttachment[]) => void;
+
+  arrivalRecords: BookArrivalRecord[];
+  recordBookArrival: (data: {
+    bookId?: string;
+    newBook?: Omit<Book, 'id' | 'availableQuantity' | 'addedDate'>;
+    quantity: number;
+    unitCost: number;
+    paidAmount: number;
+    arrivalDate: string;
+    broughtBy: string;
+    remarks?: string;
+    attachments?: StoredAttachment[];
+    invoiceNo?: string;
+  }) => { success: boolean; message: string };
+  collectArrivalPayment: (arrivalId: string, amount: number, notes?: string, attachments?: StoredAttachment[]) => void;
 
   assets: OfficeAsset[];
   addAsset: (asset: Omit<OfficeAsset, 'id' | 'assetTag'> & { assetTag?: string }) => void;
@@ -71,7 +105,7 @@ interface AppContextType {
   assignAsset: (assetId: string, personName: string, deptName: string) => void;
 
   logs: ActivityLog[];
-  addLog: (action: string, details: string, module: 'Books' | 'Lending' | 'Sales' | 'Assets' | 'Auth') => void;
+  addLog: (action: string, details: string, module: 'Books' | 'Lending' | 'Sales' | 'Assets' | 'Auth' | 'Arrivals') => void;
   resetAllData: () => void;
 }
 
@@ -116,6 +150,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [books, setBooks] = useState<Book[]>([]);
   const [borrowRecords, setBorrowRecords] = useState<BookBorrowRecord[]>([]);
   const [saleRecords, setSaleRecords] = useState<BookSaleRecord[]>([]);
+  const [arrivalRecords, setArrivalRecords] = useState<BookArrivalRecord[]>([]);
   const [assets, setAssets] = useState<OfficeAsset[]>([]);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
 
@@ -126,6 +161,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setBooks((data.books || []) as Book[]);
       setBorrowRecords((data.borrowRecords || []) as BookBorrowRecord[]);
       setSaleRecords((data.saleRecords || []) as BookSaleRecord[]);
+      setArrivalRecords(
+        ((data.arrivals || []) as BookArrivalRecord[]).slice().sort((a, b) =>
+          String(b.arrivalDate).localeCompare(String(a.arrivalDate)) || String(b.id).localeCompare(String(a.id))
+        )
+      );
       setAssets((data.assets || []) as OfficeAsset[]);
       setLogs((data.logs || []) as ActivityLog[]);
     } catch (err) {
@@ -163,7 +203,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const addLog = (
     action: string,
     details: string,
-    module: 'Books' | 'Lending' | 'Sales' | 'Assets' | 'Auth',
+    module: 'Books' | 'Lending' | 'Sales' | 'Assets' | 'Auth' | 'Arrivals',
     actor?: UserProfile | null
   ) => {
     const user = actor ?? currentUser;
@@ -252,6 +292,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setBooks([]);
     setBorrowRecords([]);
     setSaleRecords([]);
+    setArrivalRecords([]);
     setAssets([]);
     setLogs([]);
   };
@@ -286,7 +327,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const updateBook = (updatedBook: Book) => {
     setBooks((prev) => prev.map((b) => (b.id === updatedBook.id ? updatedBook : b)));
     api.updateBook(updatedBook).catch((err) => persistError(err, 'updateBook'));
-    addLog('Book Updated', `Updated details for "${updatedBook.title}"`, 'Books');
+    addLog('Book Updated', `Updated details for "${updatedBook.title}" (ISBN: ${updatedBook.isbn}, stock: ${updatedBook.availableQuantity}/${updatedBook.totalQuantity})`, 'Books');
   };
 
   const deleteBook = (bookId: string) => {
@@ -296,6 +337,103 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (target) {
       addLog('Book Removed', `Removed book "${target.title}" from catalog`, 'Books');
     }
+  };
+
+  const importBooks = (rows: BookImportRow[]) => {
+    if (!currentUser) {
+      return { success: false, created: 0, updated: 0, skipped: 0, message: 'Please sign in first.' };
+    }
+    if (rows.length === 0) {
+      return { success: false, created: 0, updated: 0, skipped: 0, message: 'No rows to import.' };
+    }
+
+    const nextBooks = [...books];
+    const changed: Book[] = [];
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
+    const today = new Date().toISOString().split('T')[0];
+
+    const findIndex = (row: BookImportRow) => {
+      const isbn = row.isbn?.trim().toLowerCase();
+      const xlsxId = row.excelId ? `bk-xlsx-${row.excelId}` : '';
+      return nextBooks.findIndex((book) => {
+        if (xlsxId && book.id === xlsxId) return true;
+        if (isbn && book.isbn.trim().toLowerCase() === isbn) return true;
+        return false;
+      });
+    };
+
+    rows.forEach((row, index) => {
+      const title = row.title.trim();
+      if (!title) {
+        skipped += 1;
+        return;
+      }
+
+      const matchIndex = findIndex(row);
+      if (matchIndex >= 0) {
+        const existing = nextBooks[matchIndex];
+        const issued = Math.max(0, existing.totalQuantity - existing.availableQuantity);
+        const totalQuantity = Math.max(row.totalQuantity, issued);
+        const updatedBook: Book = {
+          ...existing,
+          title,
+          author: row.author?.trim() || existing.author,
+          publisher: row.publisher?.trim() || existing.publisher,
+          price: row.price,
+          isbn: row.isbn?.trim() || existing.isbn,
+          category: row.category?.trim() || existing.category,
+          shelfLocation: row.shelfLocation?.trim() || existing.shelfLocation,
+          language: row.language?.trim() || existing.language,
+          description: row.description || existing.description,
+          totalQuantity,
+          availableQuantity: totalQuantity - issued,
+        };
+        nextBooks[matchIndex] = updatedBook;
+        changed.push(updatedBook);
+        updated += 1;
+        return;
+      }
+
+      const isbn =
+        row.isbn?.trim() ||
+        `ISBN-${Date.now()}-${index}`;
+      const newBook: Book = {
+        id: row.excelId ? `bk-xlsx-${row.excelId}` : `bk-imp-${Date.now()}-${index}`,
+        title,
+        author: row.author?.trim() || 'Not specified',
+        publisher: row.publisher?.trim() || 'Tanzeem-e-Islami',
+        price: row.price,
+        totalQuantity: row.totalQuantity,
+        availableQuantity: row.totalQuantity,
+        isbn,
+        category: row.category?.trim() || 'Tanzeem Publications',
+        shelfLocation: row.shelfLocation?.trim() || 'Main Store',
+        language: row.language?.trim() || 'Urdu',
+        addedDate: today,
+        description: row.description,
+      };
+      nextBooks.unshift(newBook);
+      changed.push(newBook);
+      created += 1;
+    });
+
+    setBooks(nextBooks);
+    api.saveBooksBatch(changed).catch((err) => persistError(err, 'importBooks'));
+    addLog(
+      'Books Imported',
+      `Imported spreadsheet: ${created} new titles, ${updated} updated${skipped ? `, ${skipped} skipped` : ''}.`,
+      'Books'
+    );
+
+    return {
+      success: true,
+      created,
+      updated,
+      skipped,
+      message: `Imported ${created} new titles and updated ${updated}.`,
+    };
   };
 
   const issueBookBorrow = (data: {
@@ -391,6 +529,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     initialPayment: number;
     paymentDueDate?: string;
     remarks?: string;
+    paymentAttachments?: StoredAttachment[];
   }) => {
     if (!currentUser) {
       return { success: false, message: 'Please sign in first.' };
@@ -454,6 +593,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               date: today,
               receivedBy: currentUser.name,
               notes: 'Initial sale payment',
+              attachments: data.paymentAttachments?.length ? data.paymentAttachments : undefined,
             },
           ]
         : [];
@@ -498,7 +638,159 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
   };
 
-  const collectPayment = (saleId: string, amount: number, notes?: string) => {
+  const updateBookSale = (
+    saleId: string,
+    data: {
+      customerName: string;
+      customerPhone?: string;
+      unitName: string;
+      items: Array<{ bookId: string; quantity: number; unitPrice?: number }>;
+      discount: number;
+      paymentDueDate?: string;
+      remarks?: string;
+    }
+  ) => {
+    if (!currentUser) {
+      return { success: false, message: 'Please sign in first.' };
+    }
+
+    const existingSale = saleRecords.find((s) => s.id === saleId);
+    if (!existingSale) {
+      return { success: false, message: 'Sale record not found.' };
+    }
+
+    const restoredQty = new Map<string, number>();
+    existingSale.items.forEach((item) => {
+      restoredQty.set(item.bookId, (restoredQty.get(item.bookId) || 0) + item.quantity);
+    });
+
+    const saleItems: SaleItem[] = [];
+    let subtotal = 0;
+
+    for (const item of data.items) {
+      const book = books.find((b) => b.id === item.bookId);
+      if (!book) {
+        return { success: false, message: `Selected book ID ${item.bookId} not found.` };
+      }
+      const availableStock = book.totalQuantity + (restoredQty.get(book.id) || 0);
+      if (availableStock < item.quantity) {
+        return {
+          success: false,
+          message: `Insufficient stock for "${book.title}". Available: ${availableStock}, requested: ${item.quantity}.`,
+        };
+      }
+
+      const price = item.unitPrice !== undefined ? item.unitPrice : book.price;
+      subtotal += price * item.quantity;
+      saleItems.push({
+        bookId: book.id,
+        bookTitle: book.title,
+        isbn: book.isbn,
+        unitPrice: price,
+        quantity: item.quantity,
+      });
+    }
+
+    const netDelta = new Map<string, number>(restoredQty);
+    data.items.forEach((item) => {
+      netDelta.set(item.bookId, (netDelta.get(item.bookId) || 0) - item.quantity);
+    });
+
+    const updatedBooks = books.map((b) => {
+      const delta = netDelta.get(b.id) || 0;
+      if (delta === 0) return b;
+      return {
+        ...b,
+        totalQuantity: Math.max(0, b.totalQuantity + delta),
+        availableQuantity: Math.max(0, b.availableQuantity + delta),
+      };
+    });
+    const changedBooks = updatedBooks.filter((b) => (netDelta.get(b.id) || 0) !== 0);
+
+    const netAmount = Math.max(0, subtotal - data.discount);
+    const paidAmount = existingSale.paidAmount;
+    const remainingAmount = Math.max(0, netAmount - paidAmount);
+    const paymentStatus: 'Paid' | 'Payment Remaining' = remainingAmount <= 0 ? 'Paid' : 'Payment Remaining';
+
+    const updatedSale: BookSaleRecord = {
+      ...existingSale,
+      customerName: data.customerName,
+      customerPhone: data.customerPhone,
+      unitName: data.unitName,
+      items: saleItems,
+      subtotal,
+      discount: data.discount,
+      netAmount,
+      remainingAmount,
+      paymentStatus,
+      paymentDueDate: remainingAmount <= 0 ? undefined : data.paymentDueDate,
+      remarks: data.remarks,
+    };
+
+    setBooks(updatedBooks);
+    setSaleRecords((prev) => prev.map((s) => (s.id === saleId ? updatedSale : s)));
+    if (changedBooks.length > 0) {
+      api.saveBooksBatch(changedBooks).catch((err) => persistError(err, 'saveBooksBatch'));
+    }
+    api.updateSale(updatedSale).catch((err) => persistError(err, 'updateSale'));
+    addLog(
+      'Book Sale Updated',
+      `Updated invoice ${existingSale.invoiceNo} for ${data.customerName}. Total: Rs. ${netAmount}, Status: ${paymentStatus}`,
+      'Sales'
+    );
+
+    return {
+      success: true,
+      message: `Invoice ${existingSale.invoiceNo} updated successfully.`,
+      saleRecord: updatedSale,
+    };
+  };
+
+  const deleteBookSale = (saleId: string) => {
+    if (!currentUser) {
+      return { success: false, message: 'Please sign in first.' };
+    }
+
+    const existingSale = saleRecords.find((s) => s.id === saleId);
+    if (!existingSale) {
+      return { success: false, message: 'Sale record not found.' };
+    }
+
+    const restoreQty = new Map<string, number>();
+    existingSale.items.forEach((item) => {
+      restoreQty.set(item.bookId, (restoreQty.get(item.bookId) || 0) + item.quantity);
+    });
+
+    const updatedBooks = books.map((b) => {
+      const qty = restoreQty.get(b.id) || 0;
+      if (qty === 0) return b;
+      return {
+        ...b,
+        totalQuantity: b.totalQuantity + qty,
+        availableQuantity: b.availableQuantity + qty,
+      };
+    });
+    const changedBooks = updatedBooks.filter((b) => (restoreQty.get(b.id) || 0) > 0);
+
+    setBooks(updatedBooks);
+    setSaleRecords((prev) => prev.filter((s) => s.id !== saleId));
+    if (changedBooks.length > 0) {
+      api.saveBooksBatch(changedBooks).catch((err) => persistError(err, 'saveBooksBatch'));
+    }
+    api.deleteSale(saleId).catch((err) => persistError(err, 'deleteSale'));
+    addLog(
+      'Book Sale Deleted',
+      `Deleted invoice ${existingSale.invoiceNo} for ${existingSale.customerName}. Stock restored.`,
+      'Sales'
+    );
+
+    return {
+      success: true,
+      message: `Invoice ${existingSale.invoiceNo} deleted and stock restored.`,
+    };
+  };
+
+  const collectPayment = (saleId: string, amount: number, notes?: string, attachments?: StoredAttachment[]) => {
     if (!currentUser) return;
     const sale = saleRecords.find((s) => s.id === saleId);
     if (!sale) return;
@@ -514,6 +806,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       date: new Date().toISOString().split('T')[0],
       receivedBy: currentUser.name,
       notes: notes || 'Outstanding payment collection',
+      attachments: attachments?.length ? attachments : undefined,
     };
 
     const updatedSale: BookSaleRecord = {
@@ -530,6 +823,172 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       'Payment Received',
       `Collected Rs. ${addedPayment} for Invoice ${sale.invoiceNo} (${sale.customerName}). Remaining balance: Rs. ${newRemainingAmount}`,
       'Sales'
+    );
+  };
+
+  const recordBookArrival = (data: {
+    bookId?: string;
+    newBook?: Omit<Book, 'id' | 'availableQuantity' | 'addedDate'>;
+    quantity: number;
+    unitCost: number;
+    paidAmount: number;
+    arrivalDate: string;
+    broughtBy: string;
+    remarks?: string;
+    attachments?: StoredAttachment[];
+    invoiceNo?: string;
+  }) => {
+    if (!currentUser) {
+      return { success: false, message: 'Please sign in first.' };
+    }
+
+    const qty = Math.floor(Number(data.quantity));
+    if (!qty || qty < 1) {
+      return { success: false, message: 'Quantity received must be at least 1.' };
+    }
+    if (!data.broughtBy.trim()) {
+      return { success: false, message: 'Please enter who brought the books.' };
+    }
+    if (!data.arrivalDate) {
+      return { success: false, message: 'Please enter the arrival date.' };
+    }
+
+    let targetBook: Book | undefined;
+    let createdNewTitle = false;
+
+    if (data.bookId) {
+      targetBook = books.find((b) => b.id === data.bookId);
+      if (!targetBook) {
+        return { success: false, message: 'Selected book was not found in the catalog.' };
+      }
+    } else if (data.newBook) {
+      const isbn =
+        data.newBook.isbn.trim() ||
+        `ISBN-${Math.floor(1000000000000 + Math.random() * 9000000000000)}`;
+      targetBook = {
+        ...data.newBook,
+        id: `bk-${Date.now()}`,
+        isbn,
+        totalQuantity: 0,
+        availableQuantity: 0,
+        addedDate: data.arrivalDate,
+      };
+      createdNewTitle = true;
+    } else {
+      return { success: false, message: 'Select an existing book or enter a new title.' };
+    }
+
+    if (!targetBook) {
+      return { success: false, message: 'Could not resolve the book for this arrival.' };
+    }
+
+    const unitCost = Math.max(0, Number(data.unitCost) || 0);
+    const totalCost = unitCost * qty;
+    const paidAmount = Math.min(totalCost, Math.max(0, Number(data.paidAmount) || 0));
+    const remainingAmount = Math.max(0, totalCost - paidAmount);
+    const paymentStatus: ArrivalPaymentStatus =
+      remainingAmount <= 0 ? 'Paid' : paidAmount <= 0 ? 'Unpaid' : 'Partial';
+
+    const updatedBook: Book = {
+      ...targetBook,
+      totalQuantity: targetBook.totalQuantity + qty,
+      availableQuantity: targetBook.availableQuantity + qty,
+    };
+
+    const today = new Date().toISOString().split('T')[0];
+    const arrivalRecord: BookArrivalRecord = {
+      id: `arr-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      bookId: updatedBook.id,
+      bookTitle: updatedBook.title,
+      bookIsbn: updatedBook.isbn,
+      quantity: qty,
+      unitCost,
+      totalCost,
+      paidAmount,
+      remainingAmount,
+      paymentStatus,
+      arrivalDate: data.arrivalDate,
+      broughtBy: data.broughtBy.trim(),
+      remarks: data.remarks?.trim(),
+      recordedBy: currentUser.name,
+      recordedAt: today,
+      attachments: data.attachments,
+      invoiceNo: data.invoiceNo,
+      paymentHistory:
+        paidAmount > 0
+          ? [
+              {
+                id: `pay-${Date.now()}`,
+                amount: paidAmount,
+                date: today,
+                receivedBy: currentUser.name,
+                notes: 'Payment recorded with book arrival',
+                attachments: data.attachments,
+              },
+            ]
+          : [],
+    };
+
+    if (createdNewTitle) {
+      setBooks((prev) => [updatedBook, ...prev]);
+    } else {
+      setBooks((prev) => prev.map((b) => (b.id === updatedBook.id ? updatedBook : b)));
+    }
+    setArrivalRecords((prev) => [arrivalRecord, ...prev]);
+
+    api.saveBook(updatedBook).catch((err) => persistError(err, 'saveBook'));
+    api.saveArrival(arrivalRecord).catch((err) => persistError(err, 'saveArrival'));
+    addLog(
+      createdNewTitle ? 'New Book Arrival' : 'Stock Arrival Recorded',
+      `${qty} cop${qty === 1 ? 'y' : 'ies'} of "${updatedBook.title}" received on ${data.arrivalDate}, brought by ${data.broughtBy.trim()}. Payment: ${paymentStatus}${
+        remainingAmount > 0 ? ` (Remaining: Rs. ${remainingAmount.toLocaleString()})` : ''
+      }`,
+      'Arrivals'
+    );
+
+    return {
+      success: true,
+      message: createdNewTitle
+        ? `New title "${updatedBook.title}" added with ${qty} copies.`
+        : `Recorded ${qty} incoming cop${qty === 1 ? 'y' : 'ies'} of "${updatedBook.title}".`,
+    };
+  };
+
+  const collectArrivalPayment = (arrivalId: string, amount: number, notes?: string, attachments?: StoredAttachment[]) => {
+    if (!currentUser) return;
+    const arrival = arrivalRecords.find((r) => r.id === arrivalId);
+    if (!arrival) return;
+
+    const addedPayment = Math.min(amount, arrival.remainingAmount);
+    const newPaidAmount = arrival.paidAmount + addedPayment;
+    const newRemainingAmount = Math.max(0, arrival.totalCost - newPaidAmount);
+    const newStatus: ArrivalPaymentStatus =
+      newRemainingAmount <= 0 ? 'Paid' : newPaidAmount <= 0 ? 'Unpaid' : 'Partial';
+
+    const updatedArrival: BookArrivalRecord = {
+      ...arrival,
+      paidAmount: newPaidAmount,
+      remainingAmount: newRemainingAmount,
+      paymentStatus: newStatus,
+      paymentHistory: [
+        ...arrival.paymentHistory,
+        {
+          id: `pay-${Date.now()}`,
+          amount: addedPayment,
+          date: new Date().toISOString().split('T')[0],
+          receivedBy: currentUser.name,
+          notes: notes || 'Arrival payment collection',
+          attachments: attachments?.length ? attachments : undefined,
+        },
+      ],
+    };
+
+    setArrivalRecords((prev) => prev.map((r) => (r.id === arrivalId ? updatedArrival : r)));
+    api.updateArrival(updatedArrival).catch((err) => persistError(err, 'updateArrival'));
+    addLog(
+      'Arrival Payment Recorded',
+      `Paid Rs. ${addedPayment.toLocaleString()} for incoming "${arrival.bookTitle}" (${arrival.quantity} copies, brought by ${arrival.broughtBy}). Remaining: Rs. ${newRemainingAmount.toLocaleString()}`,
+      'Arrivals'
     );
   };
 
@@ -605,6 +1064,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setBooks([]);
         setBorrowRecords([]);
         setSaleRecords([]);
+        setArrivalRecords([]);
         setAssets([]);
         setLogs([]);
         addLog('Data Reset', 'Cleared all inventory data from database', 'Auth');
@@ -629,12 +1089,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         addBook,
         updateBook,
         deleteBook,
+        importBooks,
         borrowRecords,
         issueBookBorrow,
         returnBookBorrow,
         saleRecords,
         createBookSale,
+        updateBookSale,
+        deleteBookSale,
         collectPayment,
+        arrivalRecords,
+        recordBookArrival,
+        collectArrivalPayment,
         assets,
         addAsset,
         updateAsset,

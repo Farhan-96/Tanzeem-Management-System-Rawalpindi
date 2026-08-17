@@ -16,18 +16,23 @@ import {
   MapPin,
   Globe,
   Info,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Book } from '../types';
+import { Modal, ModalHeader, ModalBody, ModalFooter } from './modals/Modal';
+import { ImportBooksModal } from './modals/ImportBooksModal';
 
 interface BookCatalogViewProps {
   openAddBookModal: () => void;
+  openEditBookModal: (book: Book) => void;
   openSellBookModal: (preselectedBook?: Book) => void;
   openBorrowModal: (preselectedBook?: Book) => void;
 }
 
 export const BookCatalogView: React.FC<BookCatalogViewProps> = ({
   openAddBookModal,
+  openEditBookModal,
   openSellBookModal,
   openBorrowModal,
 }) => {
@@ -36,8 +41,8 @@ export const BookCatalogView: React.FC<BookCatalogViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedLanguage, setSelectedLanguage] = useState<string>('All');
-  const [editingBook, setEditingBook] = useState<Book | null>(null);
   const [viewDetailBook, setViewDetailBook] = useState<Book | null>(null);
+  const [importModalOpen, setImportModalOpen] = useState(false);
 
   // Extract unique categories and languages for filters
   const categories = ['All', ...Array.from(new Set(books.map((b) => b.category)))];
@@ -70,9 +75,9 @@ export const BookCatalogView: React.FC<BookCatalogViewProps> = ({
       <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-2">
-            <h2 className="text-xl font-bold text-slate-900 font-serif">Books Catalog & Master Inventory</h2>
+            <h2 className="text-xl font-bold text-slate-900 font-serif">Book Catalog</h2>
             <span className="text-xs font-semibold bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full border border-emerald-200">
-              {books.length} Unique Titles
+              {books.length} Books
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1">
@@ -80,14 +85,24 @@ export const BookCatalogView: React.FC<BookCatalogViewProps> = ({
           </p>
         </div>
 
-        <button
-          id="add-new-book-button"
-          onClick={openAddBookModal}
-          className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-md transition-all flex items-center justify-center space-x-2 shrink-0"
-        >
-          <Plus className="w-4 h-4 text-amber-300" />
-          <span>+ Add New Book (Bulk or 1)</span>
-        </button>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+          <button
+            id="import-books-button"
+            onClick={() => setImportModalOpen(true)}
+            className="bg-white hover:bg-slate-50 text-emerald-800 text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs border border-emerald-200 transition-all flex items-center justify-center space-x-2"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Import Excel</span>
+          </button>
+          <button
+            id="add-new-book-button"
+            onClick={openAddBookModal}
+            className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-md transition-all flex items-center justify-center space-x-2"
+          >
+            <Plus className="w-4 h-4 text-amber-300" />
+            <span>+ Add Book</span>
+          </button>
+        </div>
       </div>
 
       {/* Search Bar & Filters */}
@@ -163,7 +178,7 @@ export const BookCatalogView: React.FC<BookCatalogViewProps> = ({
                 {/* Book Card Header */}
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
-                    {book.category}
+                    {book.category || 'Uncategorized'}
                   </span>
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded ${
@@ -179,8 +194,10 @@ export const BookCatalogView: React.FC<BookCatalogViewProps> = ({
                 </div>
 
                 <h3 className="text-base font-bold text-slate-900 font-serif line-clamp-1">{book.title}</h3>
-                <p className="text-xs font-medium text-slate-600 mt-0.5">By {book.author}</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">Publisher: {book.publisher}</p>
+                <p className="text-xs font-medium text-slate-600 mt-0.5">{book.author ? `By ${book.author}` : 'Author not specified'}</p>
+                {book.publisher ? (
+                  <p className="text-[11px] text-slate-400 mt-0.5">Publisher: {book.publisher}</p>
+                ) : null}
 
                 {/* Metadata Badges */}
                 <div className="grid grid-cols-2 gap-2 my-3 text-xs">
@@ -207,7 +224,7 @@ export const BookCatalogView: React.FC<BookCatalogViewProps> = ({
                       <MapPin className="w-3 h-3 text-slate-400" />
                       <span>{book.shelfLocation}</span>
                     </span>
-                    <span className="text-slate-400">Lang: {book.language}</span>
+                    <span className="text-slate-400">{book.language ? `Lang: ${book.language}` : ''}</span>
                   </div>
                 </div>
               </div>
@@ -219,11 +236,11 @@ export const BookCatalogView: React.FC<BookCatalogViewProps> = ({
                     id={`issue-borrow-${book.id}`}
                     onClick={() => openBorrowModal(book)}
                     disabled={!isAvailable}
-                    title="Issue for Lending/Borrowing"
+                    title="Lend this book"
                     className="px-2.5 py-1.5 bg-emerald-800 hover:bg-emerald-700 disabled:opacity-40 text-white rounded-lg text-xs font-semibold flex items-center space-x-1 shadow-xs"
                   >
                     <RotateCcw className="w-3 h-3 text-amber-300" />
-                    <span>Issue Borrow</span>
+                    <span>Lend Book</span>
                   </button>
                   <button
                     id={`sell-book-${book.id}`}
@@ -233,7 +250,7 @@ export const BookCatalogView: React.FC<BookCatalogViewProps> = ({
                     className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-emerald-950 font-bold rounded-lg text-xs flex items-center space-x-1 shadow-xs"
                   >
                     <Receipt className="w-3 h-3" />
-                    <span>Sell</span>
+                    <span>Sell Book</span>
                   </button>
                 </div>
 
@@ -245,6 +262,15 @@ export const BookCatalogView: React.FC<BookCatalogViewProps> = ({
                     className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg"
                   >
                     <Info className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    id={`edit-book-${book.id}`}
+                    onClick={() => openEditBookModal(book)}
+                    title="Update Book Record"
+                    className="p-1.5 text-amber-600 hover:text-amber-800 hover:bg-amber-50 rounded-lg"
+                  >
+                    <Edit2 className="w-4 h-4" />
                   </button>
 
                   {currentUser.role === 'Admin' && (
@@ -286,29 +312,22 @@ export const BookCatalogView: React.FC<BookCatalogViewProps> = ({
 
       {/* Book Detail Modal Popup */}
       {viewDetailBook && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
-            <div className="flex items-start justify-between border-b border-slate-100 pb-3 mb-4">
-              <div>
-                <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded uppercase">
-                  {viewDetailBook.category}
-                </span>
-                <h3 className="text-xl font-bold text-slate-900 font-serif mt-1">{viewDetailBook.title}</h3>
-                <p className="text-xs text-slate-500">By {viewDetailBook.author}</p>
-              </div>
-              <button
-                onClick={() => setViewDetailBook(null)}
-                className="text-slate-400 hover:text-slate-600 text-lg font-bold p-1"
-              >
-                ✕
-              </button>
+        <Modal isOpen onClose={() => setViewDetailBook(null)} maxWidth="max-w-lg">
+          <ModalHeader onClose={() => setViewDetailBook(null)}>
+            <div className="min-w-0">
+              <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded uppercase">
+                {viewDetailBook.category || 'Uncategorized'}
+              </span>
+              <h3 className="text-lg sm:text-xl font-bold text-slate-900 font-serif mt-1">{viewDetailBook.title}</h3>
+              <p className="text-xs text-slate-500">{viewDetailBook.author ? `By ${viewDetailBook.author}` : 'Author not specified'}</p>
             </div>
+          </ModalHeader>
 
-            <div className="space-y-3 text-xs text-slate-700">
-              <div className="grid grid-cols-2 gap-3">
+          <ModalBody className="space-y-3 text-xs text-slate-700">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="bg-slate-50 p-2.5 rounded-xl">
                   <span className="text-[10px] text-slate-400 font-semibold block uppercase">Publisher</span>
-                  <span className="font-semibold text-slate-800">{viewDetailBook.publisher}</span>
+                  <span className="font-semibold text-slate-800">{viewDetailBook.publisher || '—'}</span>
                 </div>
                 <div className="bg-slate-50 p-2.5 rounded-xl">
                   <span className="text-[10px] text-slate-400 font-semibold block uppercase">Unique Identifier / ISBN</span>
@@ -330,7 +349,7 @@ export const BookCatalogView: React.FC<BookCatalogViewProps> = ({
                 </div>
                 <div className="bg-slate-50 p-2.5 rounded-xl">
                   <span className="text-[10px] text-slate-400 font-semibold block uppercase">Language</span>
-                  <span className="font-semibold text-slate-800">{viewDetailBook.language}</span>
+                  <span className="font-semibold text-slate-800">{viewDetailBook.language || '—'}</span>
                 </div>
               </div>
 
@@ -340,39 +359,50 @@ export const BookCatalogView: React.FC<BookCatalogViewProps> = ({
                   <p className="text-xs text-slate-600 leading-relaxed">{viewDetailBook.description}</p>
                 </div>
               )}
-            </div>
+          </ModalBody>
 
-            <div className="mt-6 flex justify-end space-x-2">
-              <button
-                onClick={() => {
-                  const target = viewDetailBook;
-                  setViewDetailBook(null);
-                  openBorrowModal(target);
-                }}
-                className="px-3 py-2 bg-emerald-800 text-white font-semibold text-xs rounded-xl"
-              >
-                Issue Borrow
-              </button>
-              <button
-                onClick={() => {
-                  const target = viewDetailBook;
-                  setViewDetailBook(null);
-                  openSellBookModal(target);
-                }}
-                className="px-3 py-2 bg-amber-500 text-emerald-950 font-bold text-xs rounded-xl"
-              >
-                Sell Book
-              </button>
-              <button
-                onClick={() => setViewDetailBook(null)}
-                className="px-4 py-2 bg-slate-100 text-slate-600 font-semibold text-xs rounded-xl"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+          <ModalFooter>
+            <button
+              onClick={() => setViewDetailBook(null)}
+              className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 text-slate-600 font-semibold text-xs rounded-xl"
+            >
+              Close
+            </button>
+            <button
+              onClick={() => {
+                const target = viewDetailBook;
+                setViewDetailBook(null);
+                openEditBookModal(target);
+              }}
+              className="w-full sm:w-auto px-3 py-2.5 bg-white border border-amber-300 text-amber-900 font-semibold text-xs rounded-xl"
+            >
+              Update Record
+            </button>
+            <button
+              onClick={() => {
+                const target = viewDetailBook;
+                setViewDetailBook(null);
+                openBorrowModal(target);
+              }}
+              className="w-full sm:w-auto px-3 py-2.5 bg-emerald-800 text-white font-semibold text-xs rounded-xl"
+            >
+              Lend Book
+            </button>
+            <button
+              onClick={() => {
+                const target = viewDetailBook;
+                setViewDetailBook(null);
+                openSellBookModal(target);
+              }}
+              className="w-full sm:w-auto px-3 py-2.5 bg-amber-500 text-emerald-950 font-bold text-xs rounded-xl"
+            >
+              Sell Book
+            </button>
+          </ModalFooter>
+        </Modal>
       )}
+
+      <ImportBooksModal isOpen={importModalOpen} onClose={() => setImportModalOpen(false)} />
     </div>
   );
 };

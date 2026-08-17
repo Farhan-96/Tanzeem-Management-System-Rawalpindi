@@ -19,11 +19,13 @@ import { BookSaleRecord } from '../types';
 interface PendingPaymentsViewProps {
   openCollectPaymentModal: (saleRecord: BookSaleRecord) => void;
   openPrintInvoiceModal: (saleRecord: BookSaleRecord) => void;
+  openEditSaleModal: (saleRecord: BookSaleRecord) => void;
 }
 
 export const PendingPaymentsView: React.FC<PendingPaymentsViewProps> = ({
   openCollectPaymentModal,
   openPrintInvoiceModal,
+  openEditSaleModal,
 }) => {
   const { saleRecords } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
@@ -51,9 +53,9 @@ export const PendingPaymentsView: React.FC<PendingPaymentsViewProps> = ({
       <div className="bg-gradient-to-r from-amber-900 via-amber-800 to-amber-950 rounded-2xl p-6 text-white shadow-xl border border-amber-700/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-2">
-            <h2 className="text-xl font-bold font-serif text-amber-100">Outstanding Payments Tracker (Purpose 3)</h2>
+            <h2 className="text-xl font-bold font-serif text-amber-100">Pending Payments</h2>
             <span className="text-xs font-bold bg-amber-400 text-amber-950 px-2.5 py-0.5 rounded-full">
-              {pendingSales.length} Active Pending Dues
+              {pendingSales.length} Unpaid Invoices
             </span>
           </div>
           <p className="text-xs text-amber-200/80 mt-1">
@@ -63,7 +65,7 @@ export const PendingPaymentsView: React.FC<PendingPaymentsViewProps> = ({
 
         {/* Total Outstanding Dues Counter */}
         <div className="bg-amber-950/80 p-3.5 rounded-xl border border-amber-600/50 text-right shrink-0">
-          <div className="text-[10px] uppercase font-bold text-amber-300">Total Unpaid Dues Balance</div>
+          <div className="text-[10px] uppercase font-bold text-amber-300">Amount Still Due</div>
           <div className="text-2xl font-extrabold text-amber-400">Rs. {totalPendingBalance.toLocaleString()}</div>
         </div>
       </div>
@@ -179,7 +181,14 @@ export const PendingPaymentsView: React.FC<PendingPaymentsViewProps> = ({
                       onClick={() => openCollectPaymentModal(sale)}
                       className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs shadow-xs"
                     >
-                      Collect Dues
+                      Collect Payment
+                    </button>
+                    <button
+                      id={`edit-due-${sale.id}`}
+                      onClick={() => openEditSaleModal(sale)}
+                      className="px-2.5 py-1.5 bg-white hover:bg-slate-50 text-slate-700 font-semibold rounded-lg text-xs border border-slate-200"
+                    >
+                      Edit
                     </button>
                     <button
                       id={`print-due-receipt-${sale.id}`}
