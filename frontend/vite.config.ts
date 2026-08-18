@@ -8,6 +8,7 @@ export default defineConfig(({mode}) => {
   const apiProxyTarget =
     env.VITE_DEV_API_PROXY ||
     'http://localhost:3001';
+    
 
   return {
     plugins: [react(), tailwindcss()],
@@ -17,6 +18,7 @@ export default defineConfig(({mode}) => {
       },
     },
     server: {
+      allowedHosts: true,
       hmr: process.env.DISABLE_HMR !== 'true',
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
       proxy: {
@@ -27,6 +29,7 @@ export default defineConfig(({mode}) => {
       },
     },
     preview: {
+      allowedHosts: true,
       proxy: {
         '/api': {
           target: apiProxyTarget,
