@@ -92,7 +92,7 @@ export const Header: React.FC<HeaderProps> = ({
   ];
 
   return (
-    <header className="bg-[#003822] text-white border-b border-amber-500/30 shadow-md sticky top-0 z-30">
+    <header className="bg-[#003822] text-white border-b border-amber-500/30 shadow-md sticky top-0 z-30 print:hidden">
       {/* Top Organizational Banner */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col md:flex-row items-center justify-between py-3.5 border-b border-emerald-800/80 gap-3">

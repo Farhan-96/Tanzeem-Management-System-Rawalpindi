@@ -100,7 +100,7 @@ function MainAppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F6F8F5] text-slate-900 font-sans antialiased flex flex-col selection:bg-amber-200 selection:text-emerald-950">
+    <div className="min-h-screen bg-[#F6F8F5] text-slate-900 font-sans antialiased flex flex-col selection:bg-amber-200 selection:text-emerald-950 print:min-h-0 print:h-auto print:block">
       <Header
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -112,13 +112,13 @@ function MainAppContent() {
       />
 
       {dataLoading && (
-        <div className="bg-amber-50 border-b border-amber-200 text-amber-900 text-xs py-2 px-4 text-center font-medium flex items-center justify-center gap-2">
+        <div className="bg-amber-50 border-b border-amber-200 text-amber-900 text-xs py-2 px-4 text-center font-medium flex items-center justify-center gap-2 print:hidden">
           <Loader2 className="w-3.5 h-3.5 animate-spin" />
           Loading data from database…
         </div>
       )}
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 print:hidden">
         {activeTab === 'dashboard' && (
           <DashboardView
             setActiveTab={setActiveTab}
@@ -169,7 +169,7 @@ function MainAppContent() {
         {activeTab === 'logs' && <ActivityLogsView />}
       </main>
 
-      <footer className="bg-[#002B1A] text-emerald-200/80 border-t border-emerald-900 text-xs py-4 text-center mt-auto">
+      <footer className="bg-[#002B1A] text-emerald-200/80 border-t border-emerald-900 text-xs py-4 text-center mt-auto print:hidden">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div>
             <strong className="text-white">Tanzeem Office & Library System</strong> &bull; Central Inventory, Sales & Asset Control

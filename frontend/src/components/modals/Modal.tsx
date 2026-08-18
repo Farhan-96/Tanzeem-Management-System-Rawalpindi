@@ -41,13 +41,17 @@ export const Modal: React.FC<ModalProps> = ({
   return (
     <div
       className={`fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-black/60 backdrop-blur-xs ${
-        printFriendly ? 'print:static print:bg-white print:p-0 print:inset-auto print:overflow-visible' : ''
+        printFriendly
+          ? 'print:static print:bg-white print:p-0 print:inset-auto print:overflow-visible print:h-auto print:min-h-0'
+          : ''
       }`}
       role="dialog"
       aria-modal="true"
     >
       <div
-        className="flex min-h-[100dvh] sm:min-h-full items-end sm:items-center justify-center p-0 sm:p-4"
+        className={`flex min-h-[100dvh] sm:min-h-full items-end sm:items-center justify-center p-0 sm:p-4 ${
+          printFriendly ? 'print:block print:min-h-0 print:h-auto print:p-0' : ''
+        }`}
         onClick={(e) => {
           if (e.target === e.currentTarget) onClose();
         }}
@@ -55,7 +59,7 @@ export const Modal: React.FC<ModalProps> = ({
         <div
           className={`bg-white w-full ${maxWidth} rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden ${
             printFriendly
-              ? 'print:h-auto print:shadow-none print:border-0 print:rounded-none print:my-0 print:max-w-none print:max-h-none print:overflow-visible print:p-0'
+              ? 'print:h-auto print:min-h-0 print:shadow-none print:border-0 print:rounded-none print:my-0 print:max-w-none print:max-h-none print:overflow-visible print:p-0'
               : ''
           }`}
           onClick={(e) => e.stopPropagation()}

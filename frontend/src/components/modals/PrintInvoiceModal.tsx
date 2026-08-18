@@ -13,6 +13,13 @@ export const PrintInvoiceModal: React.FC<PrintInvoiceModalProps> = ({ isOpen, on
   if (!isOpen || !saleRecord) return null;
 
   const handlePrint = () => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'visible';
+    const restore = () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('afterprint', restore);
+    };
+    window.addEventListener('afterprint', restore);
     window.print();
   };
 
@@ -40,12 +47,12 @@ export const PrintInvoiceModal: React.FC<PrintInvoiceModalProps> = ({ isOpen, on
         </div>
       </ModalHeader>
 
-      <ModalBody>
+      <ModalBody className="print:overflow-visible print:p-0 print:h-auto print:max-h-none print:flex-none">
         {/* Printable Area */}
-        <div id="printable-invoice" className="p-6 border border-slate-200 rounded-2xl bg-white space-y-6 text-xs text-slate-800 print:border-0 print:p-0 print:rounded-none">
+        <div id="printable-invoice" className="p-6 border border-slate-200 rounded-2xl bg-white space-y-6 text-xs text-slate-800 print:border-0 print:p-0 print:rounded-none print:space-y-4">
           {/* Institutional Header */}
           <div className="text-center border-b border-slate-200 pb-4">
-            <div className="w-10 h-10 mx-auto rounded-xl bg-emerald-900 text-amber-300 font-serif font-bold text-xl flex items-center justify-center mb-2">
+            <div className="w-10 h-10 mx-auto rounded-xl bg-emerald-900 text-amber-300 font-serif font-bold text-xl flex items-center justify-center mb-2 border border-emerald-900 print:text-emerald-950 print:bg-white">
               ت
             </div>
             <h2 className="text-lg font-bold text-emerald-950 font-serif">Tanzeem Office & Library System</h2>
