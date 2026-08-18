@@ -117,7 +117,7 @@ export const AuthPage: React.FC = () => {
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
             {apiOffline && (
               <div className="rounded-xl bg-red-50 border border-red-200 px-3.5 py-3 text-xs text-red-800">
-                API is unavailable. Locally run <code className="font-mono font-semibold">npm run server</code>. On Vercel, confirm the API deployed and <code className="font-mono font-semibold">MONGODB_URI</code> is set.
+                API is unavailable. Locally run <code className="font-mono font-semibold">npm run dev:backend</code>. On Render, use start command <code className="font-mono font-semibold">npm start</code> (not <code className="font-mono font-semibold">npm run dev</code>) and set <code className="font-mono font-semibold">MONGODB_URI</code>.
               </div>
             )}
 

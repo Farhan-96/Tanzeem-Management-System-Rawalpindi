@@ -392,8 +392,14 @@ app.get('/api/health', (_req, res) => {
 
 /**
  * Initialize MongoDB before handling API requests.
+ * Skip for the built frontend (static files / SPA).
  */
-app.use(async (_req, res, next) => {
+app.use(async (req, res, next) => {
+  if (!req.path.startsWith('/api')) {
+    next();
+    return;
+  }
+
   try {
     await initializeDatabase();
     next();

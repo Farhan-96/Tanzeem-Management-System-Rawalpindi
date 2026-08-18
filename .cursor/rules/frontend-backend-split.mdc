@@ -1,0 +1,30 @@
+---
+description: Keep backend code in backend/ and frontend code in frontend/
+alwaysApply: true
+---
+
+# Frontend vs backend folders
+
+This repo is two apps. Never mix them.
+
+- `frontend/` — Vite + React UI (components, hooks, pages, browser libs like `xlsx`)
+- `backend/` — Express + MongoDB API (routes, database, uploads, PDF parsing)
+
+## Do
+
+- Put UI/browser packages in `frontend/package.json`
+- Put server packages in `backend/package.json`
+- Call the API from `frontend/src/api` with `/api/...` paths
+- Spreadsheet parsing (`xlsx`) stays in `frontend/` — it runs in the browser
+
+## Don't
+
+- Don't run `vite` or `npm run dev` on Render. Build the UI, then start Express (`npm start`)
+- Don't import React, Vite, or `xlsx` from `backend/`
+- Don't put Express routes or MongoDB access in `frontend/`
+- Don't install frontend deps at the repo root
+
+## Render
+
+- Build: `npm run build` (installs both apps, writes `frontend/dist`)
+- Start: `npm start` (Express serves `/api` and the built UI)

@@ -8,7 +8,7 @@ export default defineConfig(({mode}) => {
   const apiProxyTarget =
     env.VITE_DEV_API_PROXY ||
     'http://localhost:3001';
-    
+
 
   return {
     plugins: [react(), tailwindcss()],
@@ -16,6 +16,9 @@ export default defineConfig(({mode}) => {
       alias: {
         '@': path.resolve(__dirname, '.'),
       },
+    },
+    optimizeDeps: {
+      include: ['xlsx'],
     },
     server: {
       allowedHosts: true,

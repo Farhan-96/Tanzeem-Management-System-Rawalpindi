@@ -1,14 +1,15 @@
 services:
   - type: web
-    name: tanzeem-api
+    name: tanzeem-management-system-rawalpindi
     runtime: node
     plan: free
-    rootDir: backend
-    buildCommand: npm install
+    buildCommand: npm run build
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
       - key: MONGODB_URI
         sync: false
+      - key: VITE_API_BASE_URL
+        value: https://tanzeem-management-system-rawalpindi.onrender.com
       - key: NODE_VERSION
         value: "22"
